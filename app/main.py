@@ -40,8 +40,8 @@ PROVIDER_CONFIGS = {
     },
     AIProvider.GEMINI: {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/models",
-        "default_model": "gemini-1.5-flash",
-        "models": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"]
+        "default_model": "gemini-2.0-flash",
+        "models": ["gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest", "gemini-2.5-flash-lite", "gemini-2.5-pro"]
     },
     AIProvider.DEEPSEEK: {
         "base_url": "https://api.deepseek.com/v1/chat/completions",
