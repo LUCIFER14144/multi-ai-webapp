@@ -91,13 +91,19 @@ class TaskRequest(BaseModel):
             raise ValueError("Prompt too long (max 2000 characters)")
         return v.strip()
 
+class ProviderResult(BaseModel):
+    provider: str
+    model: str
+    answer: str
+    error: Optional[str] = None
+
 class TaskResponse(BaseModel):
     final_answer: str
     research_notes: str
-    drafts: List[str]
+    provider_results: List[ProviderResult]  # All providers' answers
     critic_report: str
-    provider_used: str
-    model_used: str
+    winning_provider: str
+    winning_model: str
 
 # Retry decorator for transient errors (including rate limits)
 def is_rate_limit_error(exc):
@@ -245,16 +251,18 @@ WRITER_SHORT_SYSTEM = (
     "You are Writer AI (concise). Produce a short, simple explanation (150-220 words) and TL;DR."
 )
 CRITIC_SYSTEM = (
-    "You are Critic AI. Your job is to:\n"
-    "1. Analyze each candidate answer for accuracy, clarity, completeness, and consistency with research notes\n"
-    "2. Grade each candidate (A-F) with brief rationale\n"
-    "3. Identify the best elements from each candidate\n"
-    "4. Create a FINAL MERGED ANSWER that combines the best parts, fixes any errors, and improves clarity\n\n"
+    "You are Critic AI judging a competition between different AI providers.\n\n"
+    "Your job is to:\n"
+    "1. Analyze each AI provider's answer for accuracy, clarity, completeness, and consistency with research notes\n"
+    "2. Grade each provider's answer (A-F) with brief rationale explaining strengths and weaknesses\n"
+    "3. Declare which provider gave the BEST answer and why\n"
+    "4. Identify the best elements from each provider\n"
+    "5. Create a FINAL MERGED ANSWER that combines the best parts from all providers, fixes any errors, and improves clarity\n\n"
     "Format your response EXACTLY as:\n"
-    "=== ANALYSIS ===\n"
-    "[Your analysis and grades]\n\n"
+    "=== COMPETITION ANALYSIS ===\n"
+    "[Your analysis, grades for each provider, and declaration of winner]\n\n"
     "=== FINAL ANSWER ===\n"
-    "[Your improved, merged final answer - this is what the user will see]"
+    "[Your improved, merged final answer combining the best from all providers - this is what the user will see]"
 )
 
 async def researcher(task: str, ai_client: AIClient):
@@ -273,47 +281,129 @@ async def writer_variant(research_notes: str, ai_client: AIClient, short=False):
     temp = 0.6 if short else 0.5
     return await ai_client.chat(messages, temperature=temp, max_tokens=700 if not short else 350)
 
-async def critic(research_notes: str, drafts: List[str], ai_client: AIClient):
+async def critic(research_notes: str, provider_results: List[ProviderResult], ai_client: AIClient):
+    """Analyze all provider results and determine the best answer"""
+    # Build comparison text
+    comparison_text = ""
+    for i, result in enumerate(provider_results, 1):
+        if result.error:
+            comparison_text += f"\n{i}. {result.provider.upper()} ({result.model}): [ERROR - {result.error}]\n"
+        else:
+            comparison_text += f"\n{i}. {result.provider.upper()} ({result.model}):\n{result.answer}\n\n{'─'*60}\n"
+    
     messages = [
         {"role": "system", "content": CRITIC_SYSTEM},
-        {"role": "user", "content": f"Research notes:\n{research_notes}\n\nCandidate 1 (Full version):\n{drafts[0]}\n\n---\n\nCandidate 2 (Concise version):\n{drafts[1]}\n\nPlease analyze both candidates and produce your response in the required format."}
+        {"role": "user", "content": f"Research notes:\n{research_notes}\n\n{'═'*60}\nAI PROVIDER COMPETITION RESULTS:\n{'═'*60}\n{comparison_text}\n\nPlease analyze all providers' answers and produce your response in the required format."}
     ]
-    return await ai_client.chat(messages, temperature=0.2, max_tokens=1200)
+    return await ai_client.chat(messages, temperature=0.2, max_tokens=1500)
 
 @app.post("/api/generate", response_model=TaskResponse)
 async def generate(task: TaskRequest):
     """
-    High-level endpoint that runs Researcher -> Writer(s) -> Critic and returns the final answer.
+    Multi-provider competition: Run all available providers, compare results, and select the best answer.
     """
     try:
-        # Create AI client
-        ai_client = get_ai_client(task.provider, task.api_keys, task.model)
+        # Determine which providers have API keys
+        available_providers = []
+        if task.api_keys.openai:
+            available_providers.append((AIProvider.OPENAI, task.api_keys.openai))
+        if task.api_keys.gemini:
+            available_providers.append((AIProvider.GEMINI, task.api_keys.gemini))
+        if task.api_keys.deepseek:
+            available_providers.append((AIProvider.DEEPSEEK, task.api_keys.deepseek))
         
-        # 1) Research
-        research_notes = await researcher(task.prompt, ai_client)
-
-        # 2) Writers: one full-length, one concise — run them concurrently
-        draft_full_task = asyncio.create_task(writer_variant(research_notes, ai_client, short=False))
-        draft_short_task = asyncio.create_task(writer_variant(research_notes, ai_client, short=True))
-        drafts = await asyncio.gather(draft_full_task, draft_short_task)
-
-        # 3) Critic
-        critic_report = await critic(research_notes, drafts, ai_client)
-
-        # Extract final answer from critic report
+        if not available_providers:
+            raise HTTPException(
+                status_code=400,
+                detail="No API keys provided. Please provide at least one API key (OpenAI, Gemini, or DeepSeek)."
+            )
+        
+        # Use the first available provider for research (they all see the same research)
+        first_provider, first_key = available_providers[0]
+        research_client = AIClient(
+            first_provider,
+            first_key,
+            PROVIDER_CONFIGS[first_provider]["default_model"]
+        )
+        
+        # 1) Research phase (shared by all providers)
+        logger.info(f"Research phase using {first_provider.value}")
+        research_notes = await researcher(task.prompt, research_client)
+        
+        # 2) Generate answers from ALL available providers concurrently
+        logger.info(f"Running competition with {len(available_providers)} providers: {[p.value for p, _ in available_providers]}")
+        
+        async def get_provider_answer(provider: AIProvider, api_key: str) -> ProviderResult:
+            """Get answer from a specific provider"""
+            try:
+                # Create client for this provider
+                model = PROVIDER_CONFIGS[provider]["default_model"]
+                client = AIClient(provider, api_key, model)
+                
+                # Generate answer
+                answer = await writer_variant(research_notes, client, short=False)
+                
+                return ProviderResult(
+                    provider=provider.value,
+                    model=model,
+                    answer=answer,
+                    error=None
+                )
+            except Exception as e:
+                logger.warning(f"Provider {provider.value} failed: {str(e)}")
+                return ProviderResult(
+                    provider=provider.value,
+                    model=PROVIDER_CONFIGS[provider]["default_model"],
+                    answer="",
+                    error=str(e)[:200]
+                )
+        
+        # Run all providers in parallel
+        provider_tasks = [
+            get_provider_answer(provider, api_key)
+            for provider, api_key in available_providers
+        ]
+        provider_results = await asyncio.gather(*provider_tasks)
+        
+        # Filter out results with errors for the critic (but keep them for display)
+        successful_results = [r for r in provider_results if not r.error]
+        
+        if not successful_results:
+            raise HTTPException(
+                status_code=500,
+                detail="All AI providers failed to generate answers. Please check your API keys and try again."
+            )
+        
+        # 3) Use critic to analyze and select the best (use first successful provider for critic)
+        logger.info("Critic analyzing all provider results")
+        critic_client = research_client  # Reuse the research client for critic
+        critic_report = await critic(research_notes, provider_results, critic_client)
+        
+        # Extract final answer and determine winner from critic report
         final_answer = critic_report
+        winning_provider = successful_results[0].provider
+        winning_model = successful_results[0].model
+        
         if "=== FINAL ANSWER ===" in critic_report:
             parts = critic_report.split("=== FINAL ANSWER ===")
             if len(parts) > 1:
                 final_answer = parts[1].strip()
+            
+            # Try to extract winner from analysis
+            analysis_part = parts[0]
+            for result in successful_results:
+                if result.provider.upper() in analysis_part.upper() and ("winner" in analysis_part.lower() or "best" in analysis_part.lower()):
+                    winning_provider = result.provider
+                    winning_model = result.model
+                    break
         
         return TaskResponse(
             final_answer=final_answer,
             research_notes=research_notes,
-            drafts=drafts,
+            provider_results=provider_results,
             critic_report=critic_report,
-            provider_used=task.provider.value,
-            model_used=ai_client.model
+            winning_provider=winning_provider,
+            winning_model=winning_model
         )
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is

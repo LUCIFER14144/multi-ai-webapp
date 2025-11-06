@@ -200,15 +200,31 @@ async function generate() {
     elements.results.style.display = "block";
     elements.research.textContent = data.research_notes;
     
-    // Show both drafts with clear labeling
-    elements.drafts.textContent = `📄 VARIANT 1 (Detailed):\n\n${data.drafts[0]}\n\n${"═".repeat(60)}\n\n📄 VARIANT 2 (Concise):\n\n${data.drafts[1]}`;
+    // Show ALL provider results in competition format
+    let competitionText = "🏆 AI PROVIDER COMPETITION RESULTS 🏆\n\n";
+    data.provider_results.forEach((result, index) => {
+      const isWinner = result.provider === data.winning_provider;
+      const trophy = isWinner ? "� WINNER " : "";
+      
+      competitionText += `${trophy}${index + 1}. ${result.provider.toUpperCase()} (${result.model})\n`;
+      competitionText += "─".repeat(60) + "\n\n";
+      
+      if (result.error) {
+        competitionText += `❌ ERROR: ${result.error}\n\n`;
+      } else {
+        competitionText += `${result.answer}\n\n`;
+      }
+      competitionText += "═".repeat(60) + "\n\n";
+    });
     
-    // Show the selected best answer
+    elements.drafts.textContent = competitionText;
+    
+    // Show the merged best answer
     elements.final.textContent = data.final_answer;
     
     // Extract and show critic analysis (everything before FINAL ANSWER)
     let criticAnalysis = data.critic_report;
-    if (data.critic_report.includes("=== ANALYSIS ===")) {
+    if (data.critic_report.includes("=== COMPETITION ANALYSIS ===") || data.critic_report.includes("=== ANALYSIS ===")) {
       const parts = data.critic_report.split("=== FINAL ANSWER ===");
       if (parts.length > 1) {
         criticAnalysis = parts[0].trim();
@@ -216,20 +232,23 @@ async function generate() {
     }
     elements.criticAnalysis.textContent = criticAnalysis;
     
-    // Show metadata with badges
-    const providerBadge = `<span class="badge success">${data.provider_used.toUpperCase()}</span>`;
+    // Show metadata with badges - highlight the winning provider
+    const winnerBadge = `<span class="badge success">👑 ${data.winning_provider.toUpperCase()}</span>`;
+    const providerCount = data.provider_results.length;
+    const successCount = data.provider_results.filter(r => !r.error).length;
+    const modelBadge = `<span class="badge info">${data.winning_model}</span>`;
     elements.metaInfo.innerHTML = `
       <div class="meta-item">
-        <span class="meta-label">Provider:</span>
-        ${providerBadge}
+        <span class="meta-label">Winner:</span>
+        ${winnerBadge}
       </div>
       <div class="meta-item">
         <span class="meta-label">Model:</span>
-        <span class="meta-value">${data.model_used}</span>
+        ${modelBadge}
       </div>
       <div class="meta-item">
-        <span class="meta-label">Draft Variants:</span>
-        <span class="meta-value">${data.drafts.length}</span>
+        <span class="meta-label">Providers Competed:</span>
+        <span class="meta-value">${successCount}/${providerCount}</span>
       </div>
       <div class="meta-item">
         <span class="meta-label">Status:</span>
@@ -237,7 +256,7 @@ async function generate() {
       </div>
     `;
     
-    showStatus("✅ Pipeline completed successfully!", "success");
+    showStatus("✅ Competition completed successfully!", "success");
     
     // Scroll to results
     setTimeout(() => {
