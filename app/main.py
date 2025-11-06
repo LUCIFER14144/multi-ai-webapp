@@ -296,18 +296,29 @@ WRITER_SHORT_SYSTEM = (
     "You are Writer AI (concise). Produce a short, simple explanation (150-220 words) and TL;DR."
 )
 CRITIC_SYSTEM = (
-    "You are Critic AI judging a competition between different AI providers.\n\n"
-    "Your job is to:\n"
-    "1. Analyze each AI provider's answer for accuracy, clarity, completeness, and consistency with research notes\n"
-    "2. Grade each provider's answer (A-F) with brief rationale explaining strengths and weaknesses\n"
-    "3. Declare which provider gave the BEST answer and why\n"
-    "4. Identify the best elements from each provider\n"
-    "5. Create a FINAL MERGED ANSWER that combines the best parts from all providers, fixes any errors, and improves clarity\n\n"
+    "You are an impartial AI Judge evaluating a competition between different AI providers.\n\n"
+    "Your job:\n"
+    "1. Analyze each AI provider's answer for accuracy, clarity, completeness, and usefulness\n"
+    "2. Score each provider on a scale of 1-10 (10 = best) with brief rationale\n"
+    "3. Identify specific strengths and weaknesses of each answer\n"
+    "4. DO NOT favor any provider - be completely objective\n\n"
     "Format your response EXACTLY as:\n"
-    "=== COMPETITION ANALYSIS ===\n"
-    "[Your analysis, grades for each provider, and declaration of winner]\n\n"
-    "=== FINAL ANSWER ===\n"
-    "[Your improved, merged final answer combining the best from all providers - this is what the user will see]"
+    "=== SCORING ===\n"
+    "[Provider Name]: [Score]/10 - [Brief rationale]\n"
+    "[Repeat for each provider]\n\n"
+    "=== ANALYSIS ===\n"
+    "[Detailed comparison of all answers, highlighting best elements from each]"
+)
+
+MERGER_SYSTEM = (
+    "You are an expert AI tasked with creating the BEST possible answer by combining multiple AI responses.\n\n"
+    "Your job:\n"
+    "1. Review all the AI answers provided\n"
+    "2. Extract the best elements from each (most accurate facts, clearest explanations, best examples)\n"
+    "3. Fix any errors or inconsistencies\n"
+    "4. Create a FINAL MERGED ANSWER that is better than any individual answer\n"
+    "5. Make it clear, comprehensive, and well-structured\n\n"
+    "Output ONLY the final merged answer - no meta-commentary."
 )
 
 async def researcher(task: str, ai_client: AIClient):
@@ -327,17 +338,116 @@ async def writer_variant(research_notes: str, ai_client: AIClient, short=False):
     return await ai_client.chat(messages, temperature=temp, max_tokens=700 if not short else 350)
 
 async def critic(research_notes: str, provider_results: List[ProviderResult], ai_client: AIClient):
-    """Analyze all provider results and determine the best answer"""
+    """Single judge analyzes all provider results"""
     # Build comparison text
-    comparison_text = ""
+    comparison_text = "Research Notes:\n" + research_notes + "\n\n" + "="*60 + "\n\n"
+    comparison_text += "PROVIDER ANSWERS TO EVALUATE:\n\n"
+    
     for i, result in enumerate(provider_results, 1):
         if result.error:
-            comparison_text += f"\n{i}. {result.provider.upper()} ({result.model}): [ERROR - {result.error}]\n"
+            comparison_text += f"{i}. {result.provider.upper()} ({result.model}): [ERROR - {result.error}]\n\n"
         else:
-            comparison_text += f"\n{i}. {result.provider.upper()} ({result.model}):\n{result.answer}\n\n{'─'*60}\n"
+            comparison_text += f"{i}. {result.provider.upper()} ({result.model}):\n{result.answer}\n\n{'─'*60}\n\n"
     
     messages = [
         {"role": "system", "content": CRITIC_SYSTEM},
+        {"role": "user", "content": comparison_text}
+    ]
+    return await ai_client.chat(messages, temperature=0.2, max_tokens=1000)
+
+async def multi_judge_vote(research_notes: str, provider_results: List[ProviderResult], judge_clients: List[tuple]):
+    """
+    Have ALL available providers vote on the best answer.
+    Returns: (aggregated_analysis, vote_scores, merged_answer)
+    """
+    vote_results = []
+    
+    # Each provider judges all the answers
+    for judge_provider, judge_client in judge_clients:
+        try:
+            logger.info(f"Judge {judge_provider} evaluating all answers...")
+            judge_result = await critic(research_notes, provider_results, judge_client)
+            vote_results.append({
+                "judge": judge_provider,
+                "evaluation": judge_result
+            })
+        except Exception as e:
+            logger.error(f"Judge {judge_provider} failed: {e}")
+            vote_results.append({
+                "judge": judge_provider,
+                "evaluation": f"[ERROR: {str(e)}]"
+            })
+    
+    # Extract scores from each judge's evaluation
+    scores = {}  # {provider: [scores from all judges]}
+    for provider_result in provider_results:
+        if not provider_result.error:
+            scores[provider_result.provider] = []
+    
+    # Parse scores from each judge's evaluation
+    for vote in vote_results:
+        if "[ERROR" not in vote["evaluation"]:
+            # Extract scores (looking for patterns like "Provider: 8/10" or "Provider: 8.5/10")
+            import re
+            for provider in scores.keys():
+                # Look for score patterns
+                pattern = rf"{provider}.*?(\d+(?:\.\d+)?)\s*/\s*10"
+                match = re.search(pattern, vote["evaluation"], re.IGNORECASE)
+                if match:
+                    try:
+                        score = float(match.group(1))
+                        scores[provider].append(score)
+                    except:
+                        pass
+    
+    # Calculate average scores
+    avg_scores = {}
+    for provider, score_list in scores.items():
+        if score_list:
+            avg_scores[provider] = sum(score_list) / len(score_list)
+        else:
+            avg_scores[provider] = 0
+    
+    # Determine winner (highest average score)
+    winner = max(avg_scores.items(), key=lambda x: x[1])[0] if avg_scores else "unknown"
+    
+    # Compile all judge evaluations
+    aggregated_analysis = "=== MULTI-JUDGE VOTING RESULTS ===\n\n"
+    for vote in vote_results:
+        aggregated_analysis += f"🔍 JUDGE: {vote['judge'].upper()}\n"
+        aggregated_analysis += vote['evaluation'] + "\n\n" + "="*80 + "\n\n"
+    
+    aggregated_analysis += "=== FINAL VOTE TALLY ===\n"
+    for provider, avg_score in sorted(avg_scores.items(), key=lambda x: x[1], reverse=True):
+        vote_count = len(scores.get(provider, []))
+        aggregated_analysis += f"{'🏆 ' if provider == winner else ''}  {provider.upper()}: {avg_score:.1f}/10 (from {vote_count} judges)\n"
+    
+    aggregated_analysis += f"\n👑 WINNER: {winner.upper()} with average score of {avg_scores.get(winner, 0):.1f}/10\n"
+    
+    # Create merged answer using one of the judges
+    if judge_clients:
+        merger_client = judge_clients[0][1]  # Use first judge as merger
+        comparison_for_merger = "\n\n".join([
+            f"{r.provider.upper()}: {r.answer}" 
+            for r in provider_results if not r.error
+        ])
+        
+        merger_messages = [
+            {"role": "system", "content": MERGER_SYSTEM},
+            {"role": "user", "content": f"Research Notes:\n{research_notes}\n\nAI Answers:\n\n{comparison_for_merger}\n\nCreate the best merged answer:"}
+        ]
+        
+        try:
+            merged_answer = await merger_client.chat(merger_messages, temperature=0.3, max_tokens=1200)
+        except Exception as e:
+            logger.error(f"Merger failed: {e}")
+            # Fallback to winner's answer
+            winner_result = next((r for r in provider_results if r.provider == winner), None)
+            merged_answer = winner_result.answer if winner_result else provider_results[0].answer
+    else:
+        merged_answer = provider_results[0].answer if provider_results else "No answer available"
+    
+    return aggregated_analysis, avg_scores, winner, merged_answer
         {"role": "user", "content": f"Research notes:\n{research_notes}\n\n{'═'*60}\nAI PROVIDER COMPETITION RESULTS:\n{'═'*60}\n{comparison_text}\n\nPlease analyze all providers' answers and produce your response in the required format."}
     ]
     return await ai_client.chat(messages, temperature=0.2, max_tokens=1500)
@@ -419,28 +529,25 @@ async def generate(task: TaskRequest):
                 detail="All AI providers failed to generate answers. Please check your API keys and try again."
             )
         
-        # 3) Use critic to analyze and select the best (use first successful provider for critic)
-        logger.info("Critic analyzing all provider results")
-        critic_client = research_client  # Reuse the research client for critic
-        critic_report = await critic(research_notes, provider_results, critic_client)
+        # 3) MULTI-JUDGE VOTING: Each available provider judges ALL answers
+        logger.info(f"Multi-judge voting: {len(available_providers)} judges evaluating {len(successful_results)} answers")
         
-        # Extract final answer and determine winner from critic report
-        final_answer = critic_report
-        winning_provider = successful_results[0].provider
-        winning_model = successful_results[0].model
+        # Create judge clients (all available providers become judges)
+        judge_clients = [
+            (provider, AIClient(provider, api_key, PROVIDER_CONFIGS[provider]["default_model"]))
+            for provider, api_key in available_providers
+        ]
         
-        if "=== FINAL ANSWER ===" in critic_report:
-            parts = critic_report.split("=== FINAL ANSWER ===")
-            if len(parts) > 1:
-                final_answer = parts[1].strip()
-            
-            # Try to extract winner from analysis
-            analysis_part = parts[0]
-            for result in successful_results:
-                if result.provider.upper() in analysis_part.upper() and ("winner" in analysis_part.lower() or "best" in analysis_part.lower()):
-                    winning_provider = result.provider
-                    winning_model = result.model
-                    break
+        # Run multi-judge voting
+        critic_report, vote_scores, winning_provider, final_answer = await multi_judge_vote(
+            research_notes, 
+            provider_results, 
+            judge_clients
+        )
+        
+        # Get winning model
+        winner_result = next((r for r in provider_results if r.provider == winning_provider), successful_results[0])
+        winning_model = winner_result.model
         
         return TaskResponse(
             final_answer=final_answer,

@@ -222,15 +222,8 @@ async function generate() {
     // Show the merged best answer
     elements.final.textContent = data.final_answer;
     
-    // Extract and show critic analysis (everything before FINAL ANSWER)
-    let criticAnalysis = data.critic_report;
-    if (data.critic_report.includes("=== COMPETITION ANALYSIS ===") || data.critic_report.includes("=== ANALYSIS ===")) {
-      const parts = data.critic_report.split("=== FINAL ANSWER ===");
-      if (parts.length > 1) {
-        criticAnalysis = parts[0].trim();
-      }
-    }
-    elements.criticAnalysis.textContent = criticAnalysis;
+    // Show the full multi-judge voting report
+    elements.criticAnalysis.textContent = data.critic_report;
     
     // Show metadata with badges - highlight the winning provider
     const winnerBadge = `<span class="badge success">👑 ${data.winning_provider.toUpperCase()}</span>`;
@@ -239,7 +232,7 @@ async function generate() {
     const modelBadge = `<span class="badge info">${data.winning_model}</span>`;
     elements.metaInfo.innerHTML = `
       <div class="meta-item">
-        <span class="meta-label">Winner:</span>
+        <span class="meta-label">🏆 Winner (By Vote):</span>
         ${winnerBadge}
       </div>
       <div class="meta-item">
@@ -251,12 +244,16 @@ async function generate() {
         <span class="meta-value">${successCount}/${providerCount}</span>
       </div>
       <div class="meta-item">
+        <span class="meta-label">Judges Voted:</span>
+        <span class="meta-value">${successCount}</span>
+      </div>
+      <div class="meta-item">
         <span class="meta-label">Status:</span>
-        <span class="badge success">✓ Completed</span>
+        <span class="badge success">✓ Voting Complete</span>
       </div>
     `;
     
-    showStatus("✅ Competition completed successfully!", "success");
+    showStatus("✅ Multi-judge voting completed successfully!", "success");
     
     // Scroll to results
     setTimeout(() => {
