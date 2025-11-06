@@ -169,36 +169,31 @@ class AIClient:
             return data["choices"][0]["message"]["content"].strip()
     
     async def _gemini_chat(self, messages: List[Dict], temperature: float, max_tokens: int) -> str:
-        """Google Gemini implementation"""
-        # Gemini doesn't support system messages directly, so we merge system + user
-        # Convert messages to Gemini format
+        """Google Gemini implementation - uses REST API with URL parameter for key"""
+        # Gemini doesn't support system messages, merge with first user message
         gemini_contents = []
-        system_message = None
+        system_prefix = ""
         
         for msg in messages:
             if msg["role"] == "system":
-                system_message = msg["content"]
+                # Store system message to prepend to first user message
+                system_prefix = msg["content"] + "\n\n"
             elif msg["role"] == "user":
-                # If we have a system message, prepend it to the first user message
-                content = msg["content"]
-                if system_message:
-                    content = f"{system_message}\n\n{content}"
-                    system_message = None  # Only use once
+                # Prepend system message to first user message only
+                content = system_prefix + msg["content"]
+                system_prefix = ""  # Clear after first use
                 gemini_contents.append({
-                    "role": "user",
                     "parts": [{"text": content}]
                 })
             elif msg["role"] == "assistant":
                 gemini_contents.append({
-                    "role": "model",
                     "parts": [{"text": msg["content"]}]
                 })
         
-        url = f"{self.config['base_url']}/{self.model}:generateContent"
-        headers = {
-            "Content-Type": "application/json",
-            "x-goog-api-key": self.api_key
-        }
+        # Gemini API uses URL parameter for authentication
+        url = f"{self.config['base_url']}/{self.model}:generateContent?key={self.api_key}"
+        headers = {"Content-Type": "application/json"}
+        
         payload = {
             "contents": gemini_contents,
             "generationConfig": {
@@ -207,21 +202,42 @@ class AIClient:
             }
         }
         
+        logger.info(f"Gemini API Request - Model: {self.model}, URL: {url[:80]}...")
+        logger.debug(f"Gemini payload: {payload}")
+        
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(url, headers=headers, json=payload)
             
-            # Better error message for common Gemini issues
+            # Log response for debugging
+            logger.info(f"Gemini Response Status: {response.status_code}")
+            
+            # Detailed error handling
             if response.status_code == 404:
+                error_text = response.text
+                logger.error(f"Gemini 404 Error: {error_text}")
                 raise Exception(
-                    "Gemini API returned 404. Please verify:\n"
-                    "1. Your API key is valid (get it from https://makersuite.google.com/app/apikey)\n"
-                    "2. The Gemini API is enabled in your Google Cloud project\n"
-                    "3. You're using a valid model name"
+                    f"❌ Gemini API Key is INVALID or INACTIVE!\n\n"
+                    f"Your API key appears to be wrong or not activated.\n\n"
+                    f"📌 Get a NEW valid key:\n"
+                    f"   1. Visit: https://aistudio.google.com/app/apikey\n"
+                    f"   2. Click 'Create API Key'\n"
+                    f"   3. Copy the new key (starts with 'AIza...')\n"
+                    f"   4. Paste it in the Gemini field above\n\n"
+                    f"Note: Keys are free but must be created from Google AI Studio."
                 )
+            elif response.status_code == 400:
+                error_data = response.json()
+                logger.error(f"Gemini 400 Error: {error_data}")
+                raise Exception(f"Gemini API 400 Error: {error_data.get('error', {}).get('message', 'Bad request')}")
             
             response.raise_for_status()
             data = response.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            
+            # Extract response text
+            if "candidates" in data and len(data["candidates"]) > 0:
+                return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            else:
+                raise Exception(f"Gemini returned no candidates: {data}")
     
     async def _deepseek_chat(self, messages: List[Dict], temperature: float, max_tokens: int) -> str:
         """DeepSeek implementation"""
@@ -509,6 +525,35 @@ async def get_providers():
             for provider, config in PROVIDER_CONFIGS.items()
         }
     }
+
+@app.post("/api/validate-key")
+async def validate_api_key(provider: str, api_key: str):
+    """Validate an API key for a specific provider"""
+    try:
+        if provider == "gemini":
+            # Test with a simple request
+            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "contents": [{
+                    "parts": [{"text": "Say 'Hello' in one word"}]
+                }]
+            }
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(f"{url}?key={api_key}", headers=headers, json=payload)
+                if response.status_code == 200:
+                    return {"valid": True, "message": "API key is valid"}
+                elif response.status_code == 400:
+                    error = response.json()
+                    return {"valid": False, "message": f"API key invalid: {error.get('error', {}).get('message', 'Unknown error')}"}
+                elif response.status_code == 404:
+                    return {"valid": False, "message": "API key not found or inactive. Get a new key from https://aistudio.google.com/app/apikey"}
+                else:
+                    return {"valid": False, "message": f"Unexpected status: {response.status_code}"}
+        
+        return {"valid": False, "message": "Provider not supported for validation"}
+    except Exception as e:
+        return {"valid": False, "message": str(e)}
 
 # Optional hooks for LangChain/AutoGen (placeholders)
 # If you want to integrate LangChain or AutoGen orchestration, add that logic below.
