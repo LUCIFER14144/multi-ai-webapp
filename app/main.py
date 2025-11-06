@@ -81,17 +81,27 @@ app.add_middleware(
 try:
     frontend_dir = os.path.join(Path(__file__).parent, "frontend")
     if os.path.exists(frontend_dir):
-        app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="static")
+        # Mount static files at /static for assets
+        app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
+        # Mount index.html and other root files at /
+        app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="root")
         logger.info(f"Static files mounted from {frontend_dir}")
     else:
         logger.warning(f"Frontend directory not found at {frontend_dir}")
-import os
-static_dir = os.path.join(os.path.dirname(__file__), "frontend")
-if os.path.exists(static_dir):
-    try:
-        app.mount("/static", StaticFiles(directory=static_dir), name="static")
-    except Exception as e:
-        logger.warning(f"Could not mount static files: {e}")
+except Exception as e:
+    logger.error(f"Failed to mount static files: {e}")
+
+# Add a catch-all route for the SPA
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    frontend_dir = os.path.join(Path(__file__).parent, "frontend")
+    if os.path.exists(os.path.join(frontend_dir, "index.html")):
+        return FileResponse(os.path.join(frontend_dir, "index.html"))
+    else:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Frontend not found", "path": full_path}
+        )
 
 class APIKeys(BaseModel):
     openai: Optional[str] = None
