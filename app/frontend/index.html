@@ -181,6 +181,10 @@
       margin-bottom: 1.5rem;
     }
     
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+    
     .form-group label {
       display: block;
       font-weight: 500;
@@ -268,7 +272,7 @@
     .status-banner {
       padding: 1rem;
       border-radius: 0.5rem;
-      margin-bottom: 1.5rem;
+      margin: 1.5rem 2rem;
       font-weight: 500;
       display: none;
       align-items: center;
@@ -293,7 +297,7 @@
       border: 1px solid var(--border);
     }
     
-    .result-card:last-child { margin-bottom: 0; }
+    .result-card:last-child { margin-bottom: 1.5rem; }
     
     .result-header {
       display: flex;
@@ -533,74 +537,6 @@
         
         <div id="meta-info" class="meta-info"></div>
       </div>
-    </div>
-  </div>
-
-<script src="app.js"></script>
-</body>
-</html>
-
-  <div class="api-keys">
-    <h3>🔑 API Keys (Required)</h3>
-    <p style="font-size: 14px; color: #666; margin-bottom: 1rem;">
-      Your API keys are only used for this session and never stored on our servers.
-    </p>
-    
-    <div class="form-row">
-      <div class="form-group">
-        <label for="openai-key">OpenAI API Key</label>
-        <input type="password" id="openai-key" placeholder="sk-..." />
-        <div class="provider-info">For ChatGPT models (GPT-4, GPT-3.5-turbo)</div>
-      </div>
-      <div class="form-group">
-        <label for="gemini-key">Google Gemini API Key</label>
-        <input type="password" id="gemini-key" placeholder="AI..." />
-        <div class="provider-info">For Gemini models (Gemini-1.5-flash, Gemini-1.5-pro)</div>
-      </div>
-      <div class="form-group">
-        <label for="deepseek-key">DeepSeek API Key</label>
-        <input type="password" id="deepseek-key" placeholder="sk-..." />
-        <div class="provider-info">For DeepSeek models (deepseek-chat, deepseek-coder)</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="form-row">
-    <div class="form-group">
-      <label for="provider">AI Provider</label>
-      <select id="provider">
-        <option value="openai">OpenAI (ChatGPT)</option>
-        <option value="gemini">Google Gemini</option>
-        <option value="deepseek">DeepSeek</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label for="model">Model</label>
-      <select id="model">
-        <option value="">Loading...</option>
-      </select>
-    </div>
-  </div>
-
-  <div class="form-group">
-    <label for="prompt">Task Prompt</label>
-    <textarea id="prompt" placeholder="Explain quantum tunneling in simple terms">Explain quantum tunneling in simple terms</textarea>
-  </div>
-
-  <button id="generate">🚀 Generate with AI Pipeline</button>
-  <div id="status" class="status"></div>
-
-  <div id="results" style="display: none;">
-    <h3>📋 Research Notes</h3>
-    <pre id="research"></pre>
-
-    <h3>✍️ Draft Variants</h3>
-    <pre id="drafts"></pre>
-
-    <h3>📝 Final Answer & Critic Report</h3>
-    <pre id="final"></pre>
-    
-    <div id="meta-info" style="margin-top: 1rem; padding: 0.5rem; background: #e9ecef; border-radius: 4px; font-size: 12px;">
     </div>
   </div>
 
