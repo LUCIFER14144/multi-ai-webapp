@@ -170,17 +170,35 @@ class AIClient:
     
     async def _gemini_chat(self, messages: List[Dict], temperature: float, max_tokens: int) -> str:
         """Google Gemini implementation"""
+        # Gemini doesn't support system messages directly, so we merge system + user
         # Convert messages to Gemini format
         gemini_contents = []
-        for msg in messages:
-            role = "user" if msg["role"] == "user" else "model"
-            gemini_contents.append({
-                "role": role,
-                "parts": [{"text": msg["content"]}]
-            })
+        system_message = None
         
-        url = f"{self.config['base_url']}/{self.model}:generateContent?key={self.api_key}"
-        headers = {"Content-Type": "application/json"}
+        for msg in messages:
+            if msg["role"] == "system":
+                system_message = msg["content"]
+            elif msg["role"] == "user":
+                # If we have a system message, prepend it to the first user message
+                content = msg["content"]
+                if system_message:
+                    content = f"{system_message}\n\n{content}"
+                    system_message = None  # Only use once
+                gemini_contents.append({
+                    "role": "user",
+                    "parts": [{"text": content}]
+                })
+            elif msg["role"] == "assistant":
+                gemini_contents.append({
+                    "role": "model",
+                    "parts": [{"text": msg["content"]}]
+                })
+        
+        url = f"{self.config['base_url']}/{self.model}:generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key
+        }
         payload = {
             "contents": gemini_contents,
             "generationConfig": {
@@ -191,6 +209,16 @@ class AIClient:
         
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(url, headers=headers, json=payload)
+            
+            # Better error message for common Gemini issues
+            if response.status_code == 404:
+                raise Exception(
+                    "Gemini API returned 404. Please verify:\n"
+                    "1. Your API key is valid (get it from https://makersuite.google.com/app/apikey)\n"
+                    "2. The Gemini API is enabled in your Google Cloud project\n"
+                    "3. You're using a valid model name"
+                )
+            
             response.raise_for_status()
             data = response.json()
             return data["candidates"][0]["content"]["parts"][0]["text"].strip()
