@@ -11,6 +11,7 @@ Includes:
 import os
 import asyncio
 import logging
+import re
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -388,7 +389,6 @@ async def multi_judge_vote(research_notes: str, provider_results: List[ProviderR
     for vote in vote_results:
         if "[ERROR" not in vote["evaluation"]:
             # Extract scores (looking for patterns like "Provider: 8/10" or "Provider: 8.5/10")
-            import re
             for provider in scores.keys():
                 # Look for score patterns
                 pattern = rf"{provider}.*?(\d+(?:\.\d+)?)\s*/\s*10"
@@ -448,9 +448,6 @@ async def multi_judge_vote(research_notes: str, provider_results: List[ProviderR
         merged_answer = provider_results[0].answer if provider_results else "No answer available"
     
     return aggregated_analysis, avg_scores, winner, merged_answer
-        {"role": "user", "content": f"Research notes:\n{research_notes}\n\n{'═'*60}\nAI PROVIDER COMPETITION RESULTS:\n{'═'*60}\n{comparison_text}\n\nPlease analyze all providers' answers and produce your response in the required format."}
-    ]
-    return await ai_client.chat(messages, temperature=0.2, max_tokens=1500)
 
 @app.post("/api/generate", response_model=TaskResponse)
 async def generate(task: TaskRequest):
