@@ -1,6 +1,8 @@
 // DOM elements
 const elements = {
   generate: document.getElementById("generate"),
+  btnText: document.getElementById("btn-text"),
+  btnSpinner: document.getElementById("btn-spinner"),
   prompt: document.getElementById("prompt"),
   provider: document.getElementById("provider"),
   model: document.getElementById("model"),
@@ -83,22 +85,34 @@ function validateInputs() {
   }
   
   if (!apiKey) {
-    showStatus(`Please provide an API key for ${provider}.`, "error");
+    showStatus(`⚠️ Please provide an API key for ${provider.toUpperCase()}.`, "warning");
     return false;
   }
   
   if (apiKey.length < 10) {
-    showStatus("API key appears to be invalid (too short).", "error");
+    showStatus("⚠️ API key appears to be invalid (too short).", "warning");
     return false;
   }
   
   return true;
 }
 
-// Show status message
+// Show status message with modern styling
 function showStatus(message, type = "info") {
   elements.status.textContent = message;
-  elements.status.className = `status ${type}`;
+  elements.status.className = `status-banner show ${type}`;
+  
+  // Auto-hide success messages after 5 seconds
+  if (type === "success") {
+    setTimeout(() => {
+      elements.status.classList.remove("show");
+    }, 5000);
+  }
+}
+
+// Hide status
+function hideStatus() {
+  elements.status.classList.remove("show");
 }
 
 // Build API request
@@ -118,21 +132,33 @@ function buildRequest() {
   };
 }
 
+// Set loading state
+function setLoading(loading) {
+  elements.generate.disabled = loading;
+  
+  if (loading) {
+    elements.btnText.style.display = "none";
+    elements.btnSpinner.style.display = "inline-block";
+  } else {
+    elements.btnText.style.display = "inline";
+    elements.btnSpinner.style.display = "none";
+  }
+}
+
 // Main generate function
 async function generate() {
   if (!validateInputs()) return;
   
-  // Disable button and show progress
-  elements.generate.disabled = true;
-  elements.generate.textContent = "🔄 Processing...";
+  // Set loading state
+  setLoading(true);
   elements.results.style.display = "none";
   
-  showStatus("Initializing AI pipeline...", "info");
+  showStatus("🚀 Initializing AI pipeline...", "info");
   
   try {
     const requestData = buildRequest();
     
-    showStatus("Running Researcher → Writer → Critic pipeline...", "info");
+    showStatus("🔬 Running Researcher → Writer → Critic pipeline...", "info");
     
     const response = await fetch("/api/generate", {
       method: "POST",
@@ -147,29 +173,46 @@ async function generate() {
     
     const data = await response.json();
     
-    // Show results
+    // Show results with smooth transition
     elements.results.style.display = "block";
     elements.research.textContent = data.research_notes;
-    elements.drafts.textContent = data.drafts.join("\\n\\n═══ VARIANT SEPARATOR ═══\\n\\n");
+    elements.drafts.textContent = data.drafts.join("\n\n═══════════ VARIANT SEPARATOR ═══════════\n\n");
     elements.final.textContent = data.final_answer;
     
-    // Show metadata
+    // Show metadata with badges
+    const providerBadge = `<span class="badge success">${data.provider_used.toUpperCase()}</span>`;
     elements.metaInfo.innerHTML = `
-      <strong>Pipeline completed successfully!</strong><br>
-      Provider: ${data.provider_used} | Model: ${data.model_used} | 
-      Processed ${data.drafts.length} draft variants
+      <div class="meta-item">
+        <span class="meta-label">Provider:</span>
+        ${providerBadge}
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Model:</span>
+        <span class="meta-value">${data.model_used}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Draft Variants:</span>
+        <span class="meta-value">${data.drafts.length}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Status:</span>
+        <span class="badge success">✓ Completed</span>
+      </div>
     `;
     
     showStatus("✅ Pipeline completed successfully!", "success");
+    
+    // Scroll to results
+    setTimeout(() => {
+      elements.results.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 300);
     
   } catch (error) {
     console.error("Generation error:", error);
     showStatus(`❌ Error: ${error.message}`, "error");
     elements.results.style.display = "none";
   } finally {
-    // Re-enable button
-    elements.generate.disabled = false;
-    elements.generate.textContent = "🚀 Generate with AI Pipeline";
+    setLoading(false);
   }
 }
 
@@ -177,11 +220,24 @@ async function generate() {
 elements.provider.addEventListener("change", updateModelOptions);
 elements.generate.addEventListener("click", generate);
 
-// Handle Enter key in prompt textarea
+// Handle Enter key in prompt textarea (Ctrl+Enter to submit)
 elements.prompt.addEventListener("keydown", (e) => {
   if (e.ctrlKey && e.key === "Enter") {
     generate();
   }
+});
+
+// Add input event listeners for real-time validation feedback
+[elements.openaiKey, elements.geminiKey, elements.deepseekKey].forEach(input => {
+  input.addEventListener("input", () => {
+    if (input.value.length > 0 && input.value.length < 10) {
+      input.style.borderColor = "#f59e0b";
+    } else if (input.value.length >= 10) {
+      input.style.borderColor = "#10b981";
+    } else {
+      input.style.borderColor = "#e5e7eb";
+    }
+  });
 });
 
 // Initialize

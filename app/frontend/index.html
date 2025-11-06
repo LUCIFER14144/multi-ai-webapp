@@ -1,36 +1,544 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>Multi-AI Orchestrator</title>
+  <title>Multi-AI Orchestrator - Professional AI Pipeline</title>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: Arial, sans-serif; max-width:1000px; margin:2rem auto; padding:1rem; }
-    .form-row { display: flex; gap: 1rem; margin-bottom: 1rem; align-items: flex-end; }
-    .form-group { flex: 1; }
-    .form-group label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-    .form-group input, .form-group select, .form-group textarea { 
-      width: 100%; padding: 8px; font-size: 14px; border: 1px solid #ddd; border-radius: 4px; 
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --primary-light: #818cf8;
+      --success: #10b981;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --bg-primary: #ffffff;
+      --bg-secondary: #f9fafb;
+      --bg-tertiary: #f3f4f6;
+      --text-primary: #111827;
+      --text-secondary: #6b7280;
+      --text-tertiary: #9ca3af;
+      --border: #e5e7eb;
+      --border-focus: #6366f1;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     }
-    textarea { height: 120px; resize: vertical; }
-    .api-keys { background: #f9f9f9; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
-    .api-keys h3 { margin-top: 0; color: #333; }
-    .key-input { margin-bottom: 0.5rem; }
-    .key-input input { font-family: monospace; }
-    pre { white-space: pre-wrap; background: #f7f7f7; padding: 1rem; border-radius: 6px; font-size: 13px; }
-    button { padding: 12px 20px; font-size: 14px; background: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    button:hover { background: #005a9e; }
-    button:disabled { background: #ccc; cursor: not-allowed; }
-    .status { padding: 0.5rem 0; font-weight: bold; }
-    .error { color: #d73a49; }
-    .success { color: #28a745; }
-    .warning { color: #ffc107; }
-    .provider-info { font-size: 12px; color: #666; margin-top: 0.25rem; }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 3rem;
+      color: white;
+    }
+    
+    .header h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .header .subtitle {
+      font-size: 1.125rem;
+      opacity: 0.9;
+      font-weight: 400;
+    }
+    
+    .header .pipeline {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      background: rgba(255,255,255,0.2);
+      padding: 0.5rem 1rem;
+      border-radius: 2rem;
+      font-size: 0.875rem;
+      backdrop-filter: blur(10px);
+    }
+    
+    .main-card {
+      background: var(--bg-primary);
+      border-radius: 1rem;
+      box-shadow: var(--shadow-xl);
+      overflow: hidden;
+    }
+    
+    .card-section {
+      padding: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .card-section:last-child {
+      border-bottom: none;
+    }
+    
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .section-header h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    
+    .section-header .icon {
+      width: 2rem;
+      height: 2rem;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      border-radius: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 1rem;
+    }
+    
+    .section-description {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .api-keys-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+    
+    .key-card {
+      background: var(--bg-secondary);
+      border: 2px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1.25rem;
+      transition: all 0.2s ease;
+    }
+    
+    .key-card:hover {
+      border-color: var(--primary-light);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    
+    .key-card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    
+    .key-card-icon {
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+    
+    .key-card-icon.openai { background: linear-gradient(135deg, #10a37f, #1a7f64); color: white; }
+    .key-card-icon.gemini { background: linear-gradient(135deg, #4285f4, #34a853); color: white; }
+    .key-card-icon.deepseek { background: linear-gradient(135deg, #7c3aed, #5b21b6); color: white; }
+    
+    .key-card-title {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 1rem;
+    }
+    
+    .key-card-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+      margin-top: 0.125rem;
+    }
+    
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+    
+    .form-group label {
+      display: block;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+    }
+    
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      border: 2px solid var(--border);
+      border-radius: 0.5rem;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+    
+    .form-group input[type="password"] {
+      font-family: monospace;
+      letter-spacing: 0.1em;
+    }
+    
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    
+    .form-group textarea {
+      resize: vertical;
+      min-height: 120px;
+      line-height: 1.5;
+    }
+    
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.875rem 2rem;
+      font-size: 1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      width: 100%;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      box-shadow: var(--shadow-md);
+    }
+    
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
+    
+    .btn-primary:active:not(:disabled) {
+      transform: translateY(0);
+    }
+    
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    
+    .status-banner {
+      padding: 1rem;
+      border-radius: 0.5rem;
+      margin-bottom: 1.5rem;
+      font-weight: 500;
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    
+    .status-banner.show { display: flex; }
+    .status-banner.info { background: #dbeafe; color: #1e40af; border-left: 4px solid #3b82f6; }
+    .status-banner.success { background: #d1fae5; color: #065f46; border-left: 4px solid var(--success); }
+    .status-banner.error { background: #fee2e2; color: #991b1b; border-left: 4px solid var(--error); }
+    .status-banner.warning { background: #fef3c7; color: #92400e; border-left: 4px solid var(--warning); }
+    
+    .results-section {
+      background: var(--bg-secondary);
+    }
+    
+    .result-card {
+      background: var(--bg-primary);
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--border);
+    }
+    
+    .result-card:last-child { margin-bottom: 0; }
+    
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid var(--bg-tertiary);
+    }
+    
+    .result-icon {
+      width: 2rem;
+      height: 2rem;
+      border-radius: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+    }
+    
+    .result-icon.research { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+    .result-icon.drafts { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+    .result-icon.final { background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; }
+    
+    .result-title {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 1.125rem;
+    }
+    
+    .result-content {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    
+    .meta-info {
+      background: linear-gradient(135deg, #667eea15, #764ba215);
+      border-radius: 0.5rem;
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.875rem;
+    }
+    
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .meta-label {
+      color: var(--text-tertiary);
+      font-weight: 500;
+    }
+    
+    .meta-value {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+    
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.75rem;
+      border-radius: 1rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    
+    .badge.success { background: #d1fae5; color: #065f46; }
+    
+    @media (max-width: 768px) {
+      .header h1 { font-size: 1.75rem; }
+      .header .subtitle { font-size: 1rem; }
+      .card-section { padding: 1.5rem; }
+      .api-keys-grid { grid-template-columns: 1fr; }
+      .form-row { grid-template-columns: 1fr; }
+    }
+    
+    .loading-spinner {
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
-  <h1>Multi-AI Orchestrator (Researcher → Writer → Critic)</h1>
-  <p>Choose your AI provider, enter API keys, and let multiple AI agents work together on your task.</p>
+  <div class="container">
+    <div class="header">
+      <h1>🤖 Multi-AI Orchestrator</h1>
+      <p class="subtitle">Professional AI Pipeline for Enhanced Content Generation</p>
+      <div class="pipeline">
+        <span>🔬 Researcher</span>
+        <span>→</span>
+        <span>✍️ Writers</span>
+        <span>→</span>
+        <span>📝 Critic</span>
+      </div>
+    </div>
+    
+    <div class="main-card">
+      <!-- API Keys Section -->
+      <div class="card-section">
+        <div class="section-header">
+          <div class="icon">🔑</div>
+          <h2>API Configuration</h2>
+        </div>
+        <p class="section-description">
+          Securely provide your API keys. They are used only for this session and never stored on our servers.
+        </p>
+        
+        <div class="api-keys-grid">
+          <div class="key-card">
+            <div class="key-card-header">
+              <div class="key-card-icon openai">AI</div>
+              <div>
+                <div class="key-card-title">OpenAI</div>
+                <div class="key-card-subtitle">GPT Models</div>
+              </div>
+            </div>
+            <div class="form-group">
+              <input type="password" id="openai-key" placeholder="sk-..." />
+            </div>
+          </div>
+          
+          <div class="key-card">
+            <div class="key-card-header">
+              <div class="key-card-icon gemini">G</div>
+              <div>
+                <div class="key-card-title">Google Gemini</div>
+                <div class="key-card-subtitle">Gemini Models</div>
+              </div>
+            </div>
+            <div class="form-group">
+              <input type="password" id="gemini-key" placeholder="AI..." />
+            </div>
+          </div>
+          
+          <div class="key-card">
+            <div class="key-card-header">
+              <div class="key-card-icon deepseek">DS</div>
+              <div>
+                <div class="key-card-title">DeepSeek</div>
+                <div class="key-card-subtitle">DeepSeek Models</div>
+              </div>
+            </div>
+            <div class="form-group">
+              <input type="password" id="deepseek-key" placeholder="sk-..." />
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Configuration Section -->
+      <div class="card-section">
+        <div class="section-header">
+          <div class="icon">⚙️</div>
+          <h2>Pipeline Configuration</h2>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="provider">AI Provider</label>
+            <select id="provider">
+              <option value="openai">OpenAI (ChatGPT)</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="deepseek">DeepSeek</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label for="model">Model</label>
+            <select id="model">
+              <option value="">Loading models...</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="prompt">Task Prompt</label>
+          <textarea id="prompt" placeholder="Enter your task here... (e.g., 'Explain quantum tunneling in simple terms')">Explain quantum tunneling in simple terms</textarea>
+        </div>
+        
+        <button id="generate" class="btn btn-primary">
+          <span id="btn-text">🚀 Generate with AI Pipeline</span>
+          <span id="btn-spinner" style="display: none;" class="loading-spinner"></span>
+        </button>
+      </div>
+      
+      <!-- Status Section -->
+      <div id="status" class="status-banner"></div>
+      
+      <!-- Results Section -->
+      <div id="results" class="card-section results-section" style="display: none;">
+        <div class="section-header">
+          <div class="icon">📊</div>
+          <h2>Pipeline Results</h2>
+        </div>
+        
+        <div class="result-card">
+          <div class="result-header">
+            <div class="result-icon research">🔬</div>
+            <h3 class="result-title">Research Notes</h3>
+          </div>
+          <div id="research" class="result-content"></div>
+        </div>
+        
+        <div class="result-card">
+          <div class="result-header">
+            <div class="result-icon drafts">✍️</div>
+            <h3 class="result-title">Draft Variants</h3>
+          </div>
+          <div id="drafts" class="result-content"></div>
+        </div>
+        
+        <div class="result-card">
+          <div class="result-header">
+            <div class="result-icon final">📝</div>
+            <h3 class="result-title">Final Answer & Critic Report</h3>
+          </div>
+          <div id="final" class="result-content"></div>
+        </div>
+        
+        <div id="meta-info" class="meta-info"></div>
+      </div>
+    </div>
+  </div>
+
+<script src="app.js"></script>
+</body>
+</html>
 
   <div class="api-keys">
     <h3>🔑 API Keys (Required)</h3>
