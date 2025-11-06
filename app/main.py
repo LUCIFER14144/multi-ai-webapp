@@ -11,6 +11,7 @@ Includes:
 import os
 import asyncio
 import logging
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -63,7 +64,15 @@ app.add_middleware(
 )
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="app/frontend"), name="static")
+# Mount static files using an absolute path so uvicorn --app-dir or different cwd won't break
+base_dir = Path(__file__).resolve().parent
+frontend_dir = base_dir / "frontend"
+if not frontend_dir.exists():
+    # If frontend directory is missing, create an empty one to avoid startup failure
+    logging.warning(f"Frontend directory {frontend_dir} not found. Creating an empty directory to allow server start.")
+    frontend_dir.mkdir(parents=True, exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
 
 class APIKeys(BaseModel):
     openai: Optional[str] = None

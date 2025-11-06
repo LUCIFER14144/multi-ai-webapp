@@ -22,13 +22,35 @@ let providersData = {};
 // Load available providers and models
 async function loadProviders() {
   try {
+    // Disable generate button until providers are loaded
+    elements.generate.disabled = true;
+    elements.model.innerHTML = '<option value="">Loading models...</option>';
+    
     const response = await fetch("/api/providers");
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
     const data = await response.json();
     providersData = data.providers;
     updateModelOptions();
+    
+    // Re-enable generate button after successful load
+    elements.generate.disabled = false;
+    
   } catch (error) {
     console.error("Failed to load providers:", error);
-    elements.model.innerHTML = '<option value="">Error loading models</option>';
+    elements.model.innerHTML = '<option value="">⚠️ Failed to load models</option>';
+    
+    // Show error banner with retry option
+    showStatus(
+      `⚠️ Failed to load AI providers: ${error.message}. Please refresh the page or check if the server is running.`,
+      "error"
+    );
+    
+    // Keep generate button disabled
+    elements.generate.disabled = true;
   }
 }
 
