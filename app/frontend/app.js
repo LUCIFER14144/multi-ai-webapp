@@ -246,7 +246,40 @@ async function generate() {
     
   } catch (error) {
     console.error("Generation error:", error);
-    showStatus(`❌ Error: ${error.message}`, "error");
+    
+    let errorMessage = error.message;
+    let errorType = "error";
+    
+    // Provide helpful context for common errors
+    if (errorMessage.includes("429") || errorMessage.includes("Rate limit")) {
+      errorType = "warning";
+      errorMessage = `⏱️ Rate Limit Reached: ${errorMessage}\n\n💡 Solutions:\n` +
+                     `• Wait 1-2 minutes before trying again\n` +
+                     `• Try a different provider (switch to Gemini or DeepSeek)\n` +
+                     `• If using OpenAI free tier, consider upgrading your plan`;
+    } else if (errorMessage.includes("401") || errorMessage.includes("Invalid API key")) {
+      errorMessage = `🔑 Invalid API Key: ${errorMessage}\n\n💡 Please:\n` +
+                     `• Check that you've entered the correct API key\n` +
+                     `• Make sure there are no extra spaces\n` +
+                     `• Verify the key is active in your provider's dashboard`;
+    } else if (errorMessage.includes("403") || errorMessage.includes("forbidden")) {
+      errorMessage = `🚫 Access Denied: ${errorMessage}\n\n💡 Your API key may:\n` +
+                     `• Not have permission to use this model\n` +
+                     `• Be restricted by your organization\n` +
+                     `• Need additional setup in the provider's dashboard`;
+    } else if (errorMessage.includes("timeout") || errorMessage.includes("timed out")) {
+      errorMessage = `⏰ Request Timeout: The AI provider took too long to respond.\n\n💡 Try:\n` +
+                     `• Running the request again\n` +
+                     `• Using a shorter prompt\n` +
+                     `• Switching to a faster model`;
+    } else if (errorMessage.includes("connect") || errorMessage.includes("network")) {
+      errorMessage = `🌐 Connection Error: ${errorMessage}\n\n💡 Please:\n` +
+                     `• Check your internet connection\n` +
+                     `• Verify the AI provider's service is available\n` +
+                     `• Try again in a moment`;
+    }
+    
+    showStatus(`❌ ${errorMessage}`, errorType);
     elements.results.style.display = "none";
   } finally {
     setLoading(false);

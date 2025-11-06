@@ -99,16 +99,28 @@ class TaskResponse(BaseModel):
     provider_used: str
     model_used: str
 
-# Retry decorator for transient errors
-def is_transient(exc):
-    # treat httpx.TimeoutException or HTTP errors as transient
-    import httpx
-    return isinstance(exc, (httpx.HTTPError, httpx.TimeoutException, httpx.ConnectError))
+# Retry decorator for transient errors (including rate limits)
+def is_rate_limit_error(exc):
+    """Check if exception is a rate limit error"""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code == 429
+    return False
 
+def is_retryable_error(exc):
+    """Check if error should be retried"""
+    import httpx
+    if isinstance(exc, (httpx.TimeoutException, httpx.ConnectError)):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        # Retry on rate limits (429) and server errors (5xx)
+        return exc.response.status_code == 429 or exc.response.status_code >= 500
+    return False
+
+# Retry with exponential backoff, especially for rate limits
 retry_decorator = retry(
     retry=retry_if_exception_type(Exception),
-    wait=wait_exponential(multiplier=0.5, min=1, max=10),
-    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=30),  # Wait 2s, 4s, 8s, 16s, 30s
+    stop=stop_after_attempt(4),  # Try up to 4 times
     reraise=True
 )
 
@@ -305,9 +317,54 @@ async def generate(task: TaskRequest):
         )
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is
+    except httpx.HTTPStatusError as e:
+        # Handle specific HTTP status codes from AI providers
+        status_code = e.response.status_code
+        
+        if status_code == 429:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded for {task.provider.value}. Please wait a moment and try again. "
+                       f"If using OpenAI free tier, consider upgrading or trying a different provider (Gemini/DeepSeek)."
+            )
+        elif status_code == 401:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Invalid API key for {task.provider.value}. Please check your API key and try again."
+            )
+        elif status_code == 403:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access forbidden for {task.provider.value}. Your API key may not have the required permissions."
+            )
+        else:
+            raise HTTPException(
+                status_code=status_code,
+                detail=f"API error from {task.provider.value}: {e.response.text[:200]}"
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="Request timed out. The AI provider took too long to respond. Please try again."
+        )
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail="Could not connect to AI provider. Please check your internet connection and try again."
+        )
     except Exception as e:
         logger.exception("Error running pipeline: %s", str(e))
-        raise HTTPException(status_code=500, detail=f"Pipeline error: {str(e)}")
+        error_msg = str(e)
+        
+        # Check if it's a rate limit error mentioned in the message
+        if "429" in error_msg or "Too Many Requests" in error_msg:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Please wait a few moments before trying again. "
+                       f"Tip: Try using a different AI provider (Gemini or DeepSeek) to avoid rate limits."
+            )
+        
+        raise HTTPException(status_code=500, detail=f"Pipeline error: {error_msg[:300]}")
 
 @app.get("/")
 async def root():
