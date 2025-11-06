@@ -18,7 +18,6 @@ from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.exception_handlers import http_exception_handler
 from pydantic import BaseModel, validator
 from fastapi.middleware.cors import CORSMiddleware
 import openai
@@ -109,6 +108,12 @@ async def serve_spa(full_path: str):
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return JSONResponse(status_code=404, content={"error": "Frontend not found", "path": full_path})
+
+# Local run helper
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", "8000"))
+    uvicorn.run("app.main:app", host="127.0.0.1", port=port, reload=True)
 
 class APIKeys(BaseModel):
     openai: Optional[str] = None
