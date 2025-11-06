@@ -143,6 +143,81 @@ class TaskResponse(BaseModel):
     winning_provider: str
     winning_model: str
 
+# --- Prompt-aware model selection ---
+class PromptType(str, Enum):
+    CODE = "code"
+    DEBUG = "debug"
+    MATH = "math"
+    CREATIVE = "creative"
+    SUMMARIZE = "summarize"
+    TRANSLATE = "translate"
+    FACTUAL = "factual"
+    OTHER = "other"
+
+def detect_prompt_type(prompt: str) -> PromptType:
+    """Lightweight heuristic classification of the prompt to guide model selection.
+    Purely local (no API calls)."""
+    p = prompt.lower()
+    # Code / debug
+    code_keywords = ["code", "python", "javascript", "java", "c++", "bug", "stack trace", "traceback", "refactor", "unit test", "regex", "sql", "pandas", "error:"]
+    if any(k in p for k in code_keywords):
+        if "bug" in p or "error" in p or "stack" in p or "traceback" in p or "fix" in p:
+            return PromptType.DEBUG
+        return PromptType.CODE
+    # Math / logic
+    math_keywords = ["prove", "theorem", "derivative", "integral", "equation", "probability", "combinator", "logic puzzle", "optimize", "big-o"]
+    if any(k in p for k in math_keywords):
+        return PromptType.MATH
+    # Creative writing
+    creative_keywords = ["poem", "story", "creative", "tone", "style", "narrative", "script", "lyrics"]
+    if any(k in p for k in creative_keywords):
+        return PromptType.CREATIVE
+    # Summarization / notes
+    if "summarize" in p or "tl;dr" in p or "bullet" in p or "notes" in p:
+        return PromptType.SUMMARIZE
+    # Translation
+    if "translate" in p or "in spanish" in p or "in french" in p or "in hindi" in p or "to english" in p:
+        return PromptType.TRANSLATE
+    # Factual / research-like
+    factual_keywords = ["what is", "who is", "when was", "explain", "compare", "advantages", "disadvantages", "research", "sources"]
+    if any(k in p for k in factual_keywords):
+        return PromptType.FACTUAL
+    return PromptType.OTHER
+
+def _pick_if_available(provider: AIProvider, candidates: List[str]) -> str:
+    """Return first candidate that exists in provider's allowed models, else default."""
+    allowed = PROVIDER_CONFIGS[provider]["models"]
+    for name in candidates:
+        if name in allowed:
+            return name
+    return PROVIDER_CONFIGS[provider]["default_model"]
+
+def select_model_for_prompt(provider: AIProvider, prompt_type: PromptType) -> str:
+    """Choose a model for a provider given the prompt type, with safe fallback."""
+    if provider == AIProvider.OPENAI:
+        if prompt_type in {PromptType.CODE, PromptType.DEBUG, PromptType.MATH}:
+            return _pick_if_available(provider, ["gpt-4-turbo", "gpt-4o"])  # stronger reasoning/code
+        if prompt_type in {PromptType.SUMMARIZE, PromptType.TRANSLATE}:
+            return _pick_if_available(provider, ["gpt-4o-mini", "gpt-3.5-turbo"])  # faster/cheaper
+        if prompt_type == PromptType.CREATIVE:
+            return _pick_if_available(provider, ["gpt-4o", "gpt-4-turbo"])  # better style/creativity
+        return PROVIDER_CONFIGS[provider]["default_model"]
+    elif provider == AIProvider.GEMINI:
+        if prompt_type in {PromptType.CODE, PromptType.DEBUG, PromptType.MATH}:
+            return _pick_if_available(provider, ["gemini-2.5-pro"])  # stronger reasoning/code
+        if prompt_type in {PromptType.SUMMARIZE, PromptType.TRANSLATE}:
+            return _pick_if_available(provider, ["gemini-2.0-flash", "gemini-2.5-flash-lite"])  # faster
+        if prompt_type == PromptType.CREATIVE:
+            return _pick_if_available(provider, ["gemini-flash-latest", "gemini-2.0-flash"])  # creative tasks
+        return PROVIDER_CONFIGS[provider]["default_model"]
+    elif provider == AIProvider.DEEPSEEK:
+        if prompt_type in {PromptType.CODE, PromptType.DEBUG}:
+            return _pick_if_available(provider, ["deepseek-coder"])  # code specialized
+        # For other tasks, chat is fine
+        return PROVIDER_CONFIGS[provider]["default_model"]
+    else:
+        return PROVIDER_CONFIGS[provider]["default_model"]
+
 # Retry decorator for transient errors (including rate limits)
 def is_rate_limit_error(exc):
     """Check if exception is a rate limit error"""
@@ -506,12 +581,17 @@ async def generate(task: TaskRequest):
                 detail="No API keys provided. Please provide at least one API key (OpenAI, Gemini, or DeepSeek)."
             )
         
+        # Classify prompt & log chosen type
+        prompt_type = detect_prompt_type(task.prompt)
+        logger.info(f"Detected prompt type: {prompt_type}")
+
         # Use the first available provider for research (they all see the same research)
         first_provider, first_key = available_providers[0]
+        research_model = select_model_for_prompt(first_provider, prompt_type)
         research_client = AIClient(
             first_provider,
             first_key,
-            PROVIDER_CONFIGS[first_provider]["default_model"]
+            research_model
         )
         
         # 1) Research phase (shared by all providers)
@@ -524,13 +604,13 @@ async def generate(task: TaskRequest):
         async def get_provider_answer(provider: AIProvider, api_key: str) -> ProviderResult:
             """Get answer from a specific provider"""
             try:
-                # Create client for this provider
-                model = PROVIDER_CONFIGS[provider]["default_model"]
+                # Choose model dynamically based on prompt type
+                model = select_model_for_prompt(provider, prompt_type)
                 client = AIClient(provider, api_key, model)
-                
+
                 # Generate answer
                 answer = await writer_variant(research_notes, client, short=False)
-                
+
                 return ProviderResult(
                     provider=provider.value,
                     model=model,
@@ -567,7 +647,7 @@ async def generate(task: TaskRequest):
         
         # Create judge clients (all available providers become judges)
         judge_clients = [
-            (provider, AIClient(provider, api_key, PROVIDER_CONFIGS[provider]["default_model"]))
+            (provider, AIClient(provider, api_key, select_model_for_prompt(provider, prompt_type)))
             for provider, api_key in available_providers
         ]
         
