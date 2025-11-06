@@ -4,3 +4,4 @@ openai>=1.0.0
 httpx>=0.24.0
 tenacity>=8.2.0
 pydantic>=2.0.0
+mangum>=0.17.0

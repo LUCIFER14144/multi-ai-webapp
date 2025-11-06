@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.main import app
+from mangum import Mangum
 
-# Vercel expects 'app' to be exported
-__all__ = ['app']
+# Vercel handler
+handler = Mangum(app)
