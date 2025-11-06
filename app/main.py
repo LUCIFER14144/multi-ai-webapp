@@ -64,8 +64,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="app/frontend"), name="static")
+# Mount static files - with error handling for serverless
+import os
+static_dir = os.path.join(os.path.dirname(__file__), "frontend")
+if os.path.exists(static_dir):
+    try:
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    except Exception as e:
+        logger.warning(f"Could not mount static files: {e}")
 
 class APIKeys(BaseModel):
     openai: Optional[str] = None
@@ -608,7 +614,15 @@ async def generate(task: TaskRequest):
 @app.get("/")
 async def root():
     """Serve the frontend interface"""
-    return FileResponse("app/frontend/index.html")
+    try:
+        html_path = os.path.join(os.path.dirname(__file__), "frontend", "index.html")
+        if os.path.exists(html_path):
+            return FileResponse(html_path)
+        else:
+            return {"message": "Multi-AI Webapp API", "status": "running", "docs": "/docs"}
+    except Exception as e:
+        logger.error(f"Error serving root: {e}")
+        return {"message": "Multi-AI Webapp API", "status": "running", "docs": "/docs"}
 
 @app.get("/health")
 async def health():
