@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-AI Webapp</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Main App Container -->
+    <div class="app">
+        <!-- Chat History Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="user-info">
+                    <div class="user-avatar" id="user-avatar">👤</div>
+                    <div class="user-details">
+                        <div class="user-name" id="user-name">Loading...</div>
+                        <button class="logout-btn" id="logout-btn">Logout</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sidebar-content">
+                <button class="new-chat-btn" id="new-chat-btn">
+                    ➕ New Chat
+                </button>
+                
+                <div class="chat-history" id="chat-history">
+                    <div class="loading">Loading history...</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Token Tracker -->
+            <div class="token-tracker">
+                <div class="token-header">📊 Token Usage</div>
+                <div class="token-summary">
+                    <div class="token-stat">
+                        <span class="token-label">Total:</span>
+                        <span class="token-value" id="total-tokens">0</span>
+                    </div>
+                    <div class="token-stat">
+                        <span class="token-label">Type:</span>
+                        <span class="token-value" id="prompt-type-display">—</span>
+                    </div>
+                </div>
+                <div id="token-providers"></div>
+            </div>
+
+            <!-- Chat Interface -->
+            <div class="chat-container">
+                <div class="chat-header">
+                    <h1>🤖 Multi-AI Competition</h1>
+                    <p>Get the best answer from multiple AI models</p>
+                </div>
+
+                <!-- Results Area -->
+                <div class="results-area" id="results-area"></div>
+
+                <!-- Input Area -->
+                <div class="input-area">
+                    <div class="api-keys-section">
+                        <div class="api-key-input">
+                            <label>🔑 OpenAI Key</label>
+                            <input type="password" id="openai-key" placeholder="sk-...">
+                        </div>
+                        <div class="api-key-input">
+                            <label>🔑 Gemini Key</label>
+                            <input type="password" id="gemini-key" placeholder="AI...">
+                        </div>
+                        <div class="api-key-input">
+                            <label>🔑 DeepSeek Key</label>
+                            <input type="password" id="deepseek-key" placeholder="sk-...">
+                        </div>
+                    </div>
+
+                    <div class="prompt-section">
+                        <textarea 
+                            id="prompt" 
+                            placeholder="Ask anything... (e.g., Write a Python function to calculate fibonacci numbers)"
+                            rows="4"
+                        ></textarea>
+                        
+                        <button id="generate-btn" class="generate-btn">
+                            <span id="btn-text">🚀 Generate</span>
+                            <span id="btn-spinner" class="spinner" style="display:none;"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status Banner -->
+                <div id="status" class="status-banner"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app-new.js"></script>
+</body>
+</html>
