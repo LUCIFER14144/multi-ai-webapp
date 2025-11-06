@@ -14,6 +14,7 @@ const elements = {
   research: document.getElementById("research"),
   drafts: document.getElementById("drafts"),
   final: document.getElementById("final"),
+  criticAnalysis: document.getElementById("critic-analysis"),
   metaInfo: document.getElementById("meta-info")
 };
 
@@ -180,7 +181,7 @@ async function generate() {
   try {
     const requestData = buildRequest();
     
-    showStatus("🔬 Running Researcher → Writer → Critic pipeline...", "info");
+    showStatus("🔬 Step 1/3: Researching topic...", "info");
     
     const response = await fetch("/api/generate", {
       method: "POST",
@@ -198,8 +199,22 @@ async function generate() {
     // Show results with smooth transition
     elements.results.style.display = "block";
     elements.research.textContent = data.research_notes;
-    elements.drafts.textContent = data.drafts.join("\n\n═══════════ VARIANT SEPARATOR ═══════════\n\n");
+    
+    // Show both drafts with clear labeling
+    elements.drafts.textContent = `📄 VARIANT 1 (Detailed):\n\n${data.drafts[0]}\n\n${"═".repeat(60)}\n\n📄 VARIANT 2 (Concise):\n\n${data.drafts[1]}`;
+    
+    // Show the selected best answer
     elements.final.textContent = data.final_answer;
+    
+    // Extract and show critic analysis (everything before FINAL ANSWER)
+    let criticAnalysis = data.critic_report;
+    if (data.critic_report.includes("=== ANALYSIS ===")) {
+      const parts = data.critic_report.split("=== FINAL ANSWER ===");
+      if (parts.length > 1) {
+        criticAnalysis = parts[0].trim();
+      }
+    }
+    elements.criticAnalysis.textContent = criticAnalysis;
     
     // Show metadata with badges
     const providerBadge = `<span class="badge success">${data.provider_used.toUpperCase()}</span>`;

@@ -11,7 +11,6 @@ Includes:
 import os
 import asyncio
 import logging
-from pathlib import Path
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -64,15 +63,7 @@ app.add_middleware(
 )
 
 # Mount static files
-# Mount static files using an absolute path so uvicorn --app-dir or different cwd won't break
-base_dir = Path(__file__).resolve().parent
-frontend_dir = base_dir / "frontend"
-if not frontend_dir.exists():
-    # If frontend directory is missing, create an empty one to avoid startup failure
-    logging.warning(f"Frontend directory {frontend_dir} not found. Creating an empty directory to allow server start.")
-    frontend_dir.mkdir(parents=True, exist_ok=True)
-
-app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
+app.mount("/static", StaticFiles(directory="app/frontend"), name="static")
 
 class APIKeys(BaseModel):
     openai: Optional[str] = None
@@ -242,9 +233,16 @@ WRITER_SHORT_SYSTEM = (
     "You are Writer AI (concise). Produce a short, simple explanation (150-220 words) and TL;DR."
 )
 CRITIC_SYSTEM = (
-    "You are Critic AI. Compare candidate answers for accuracy, clarity, missing points, and "
-    "consistency with the research notes. Grade each candidate (A-F) with a short rationale, "
-    "list factual errors if any, and produce a merged final answer that corrects issues."
+    "You are Critic AI. Your job is to:\n"
+    "1. Analyze each candidate answer for accuracy, clarity, completeness, and consistency with research notes\n"
+    "2. Grade each candidate (A-F) with brief rationale\n"
+    "3. Identify the best elements from each candidate\n"
+    "4. Create a FINAL MERGED ANSWER that combines the best parts, fixes any errors, and improves clarity\n\n"
+    "Format your response EXACTLY as:\n"
+    "=== ANALYSIS ===\n"
+    "[Your analysis and grades]\n\n"
+    "=== FINAL ANSWER ===\n"
+    "[Your improved, merged final answer - this is what the user will see]"
 )
 
 async def researcher(task: str, ai_client: AIClient):
@@ -266,9 +264,9 @@ async def writer_variant(research_notes: str, ai_client: AIClient, short=False):
 async def critic(research_notes: str, drafts: List[str], ai_client: AIClient):
     messages = [
         {"role": "system", "content": CRITIC_SYSTEM},
-        {"role": "user", "content": f"Research notes:\n{research_notes}\n\nCandidates:\n\n" + "\n\n---\n\n".join(drafts)}
+        {"role": "user", "content": f"Research notes:\n{research_notes}\n\nCandidate 1 (Full version):\n{drafts[0]}\n\n---\n\nCandidate 2 (Concise version):\n{drafts[1]}\n\nPlease analyze both candidates and produce your response in the required format."}
     ]
-    return await ai_client.chat(messages, temperature=0.2, max_tokens=900)
+    return await ai_client.chat(messages, temperature=0.2, max_tokens=1200)
 
 @app.post("/api/generate", response_model=TaskResponse)
 async def generate(task: TaskRequest):
@@ -290,10 +288,13 @@ async def generate(task: TaskRequest):
         # 3) Critic
         critic_report = await critic(research_notes, drafts, ai_client)
 
-        # Try to extract the final answer from critic_report (best-effort)
+        # Extract final answer from critic report
         final_answer = critic_report
-        # (Optionally, you could parse critic output to split grades and final answer.)
-
+        if "=== FINAL ANSWER ===" in critic_report:
+            parts = critic_report.split("=== FINAL ANSWER ===")
+            if len(parts) > 1:
+                final_answer = parts[1].strip()
+        
         return TaskResponse(
             final_answer=final_answer,
             research_notes=research_notes,
