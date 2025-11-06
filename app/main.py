@@ -134,6 +134,9 @@ class ProviderResult(BaseModel):
     model: str
     answer: str
     error: Optional[str] = None
+    tokens_used: Optional[int] = None
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
 
 class TaskResponse(BaseModel):
     final_answer: str
@@ -142,6 +145,8 @@ class TaskResponse(BaseModel):
     critic_report: str
     winning_provider: str
     winning_model: str
+    prompt_type: str  # Detected prompt type
+    total_tokens: int  # Total tokens across all providers
 
 # --- Prompt-aware model selection ---
 class PromptType(str, Enum):
@@ -252,8 +257,8 @@ class AIClient:
         self.config = PROVIDER_CONFIGS[provider]
     
     @retry_decorator
-    async def chat(self, messages: List[Dict], temperature: float = 0.3, max_tokens: int = MAX_TOKENS) -> str:
-        """Unified chat interface for all providers"""
+    async def chat(self, messages: List[Dict], temperature: float = 0.3, max_tokens: int = MAX_TOKENS) -> tuple[str, Dict[str, int]]:
+        """Unified chat interface for all providers. Returns (response_text, token_usage)"""
         if self.provider == AIProvider.OPENAI:
             return await self._openai_chat(messages, temperature, max_tokens)
         elif self.provider == AIProvider.GEMINI:
@@ -263,7 +268,7 @@ class AIClient:
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
     
-    async def _openai_chat(self, messages: List[Dict], temperature: float, max_tokens: int) -> str:
+    async def _openai_chat(self, messages: List[Dict], temperature: float, max_tokens: int) -> tuple[str, Dict[str, int]]:
         """OpenAI/ChatGPT implementation"""
         url = self.config["base_url"]
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
@@ -278,9 +283,18 @@ class AIClient:
             response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
-            return data["choices"][0]["message"]["content"].strip()
+            
+            # Extract token usage
+            usage = data.get("usage", {})
+            token_info = {
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0)
+            }
+            
+            return data["choices"][0]["message"]["content"].strip(), token_info
     
-    async def _gemini_chat(self, messages: List[Dict], temperature: float, max_tokens: int) -> str:
+    async def _gemini_chat(self, messages: List[Dict], temperature: float, max_tokens: int) -> tuple[str, Dict[str, int]]:
         """Google Gemini implementation - uses REST API with URL parameter for key"""
         # Gemini doesn't support system messages, merge with first user message
         gemini_contents = []
@@ -345,13 +359,21 @@ class AIClient:
             response.raise_for_status()
             data = response.json()
             
+            # Extract token usage from Gemini response
+            usage_metadata = data.get("usageMetadata", {})
+            token_info = {
+                "prompt_tokens": usage_metadata.get("promptTokenCount", 0),
+                "completion_tokens": usage_metadata.get("candidatesTokenCount", 0),
+                "total_tokens": usage_metadata.get("totalTokenCount", 0)
+            }
+            
             # Extract response text
             if "candidates" in data and len(data["candidates"]) > 0:
-                return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                return data["candidates"][0]["content"]["parts"][0]["text"].strip(), token_info
             else:
                 raise Exception(f"Gemini returned no candidates: {data}")
     
-    async def _deepseek_chat(self, messages: List[Dict], temperature: float, max_tokens: int) -> str:
+    async def _deepseek_chat(self, messages: List[Dict], temperature: float, max_tokens: int) -> tuple[str, Dict[str, int]]:
         """DeepSeek implementation"""
         url = self.config["base_url"]
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
@@ -366,7 +388,16 @@ class AIClient:
             response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
-            return data["choices"][0]["message"]["content"].strip()
+            
+            # Extract token usage
+            usage = data.get("usage", {})
+            token_info = {
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0)
+            }
+            
+            return data["choices"][0]["message"]["content"].strip(), token_info
 
 def get_ai_client(provider: AIProvider, api_keys: APIKeys, model: Optional[str] = None) -> AIClient:
     """Factory function to create AI client"""
@@ -438,7 +469,8 @@ async def researcher(task: str, ai_client: AIClient):
         {"role": "system", "content": RESEARCHER_SYSTEM},
         {"role": "user", "content": f"Task: {task}\n\nPlease provide research notes, bullets for facts, uncertainties, and 3 sources if available."}
     ]
-    return await ai_client.chat(messages, temperature=0.15, max_tokens=600)
+    response, tokens = await ai_client.chat(messages, temperature=0.15, max_tokens=600)
+    return response, tokens
 
 async def writer_variant(research_notes: str, ai_client: AIClient, short=False):
     system = WRITER_SHORT_SYSTEM if short else WRITER_SYSTEM
@@ -447,7 +479,8 @@ async def writer_variant(research_notes: str, ai_client: AIClient, short=False):
         {"role": "user", "content": f"Research notes:\n{research_notes}\n\nPlease produce the requested output."}
     ]
     temp = 0.6 if short else 0.5
-    return await ai_client.chat(messages, temperature=temp, max_tokens=700 if not short else 350)
+    response, tokens = await ai_client.chat(messages, temperature=temp, max_tokens=700 if not short else 350)
+    return response, tokens
 
 async def critic(research_notes: str, provider_results: List[ProviderResult], ai_client: AIClient):
     """Single judge analyzes all provider results"""
@@ -465,7 +498,8 @@ async def critic(research_notes: str, provider_results: List[ProviderResult], ai
         {"role": "system", "content": CRITIC_SYSTEM},
         {"role": "user", "content": comparison_text}
     ]
-    return await ai_client.chat(messages, temperature=0.2, max_tokens=1000)
+    response, tokens = await ai_client.chat(messages, temperature=0.2, max_tokens=1000)
+    return response, tokens
 
 async def multi_judge_vote(research_notes: str, provider_results: List[ProviderResult], judge_clients: List[tuple]):
     """
@@ -478,7 +512,7 @@ async def multi_judge_vote(research_notes: str, provider_results: List[ProviderR
     for judge_provider, judge_client in judge_clients:
         try:
             logger.info(f"Judge {judge_provider} evaluating all answers...")
-            judge_result = await critic(research_notes, provider_results, judge_client)
+            judge_result, judge_tokens = await critic(research_notes, provider_results, judge_client)
             vote_results.append({
                 "judge": judge_provider,
                 "evaluation": judge_result
@@ -549,7 +583,7 @@ async def multi_judge_vote(research_notes: str, provider_results: List[ProviderR
         ]
         
         try:
-            merged_answer = await merger_client.chat(merger_messages, temperature=0.3, max_tokens=1200)
+            merged_answer, merger_tokens = await merger_client.chat(merger_messages, temperature=0.3, max_tokens=1200)
         except Exception as e:
             logger.error(f"Merger failed: {e}")
             # Fallback to winner's answer
@@ -595,8 +629,11 @@ async def generate(task: TaskRequest):
         )
         
         # 1) Research phase (shared by all providers)
-        logger.info(f"Research phase using {first_provider.value}")
-        research_notes = await researcher(task.prompt, research_client)
+        logger.info(f"Research phase using {first_provider.value} with model {research_model}")
+        research_notes, research_tokens = await researcher(task.prompt, research_client)
+        
+        # Track total tokens
+        total_tokens = research_tokens.get("total_tokens", 0)
         
         # 2) Generate answers from ALL available providers concurrently
         logger.info(f"Running competition with {len(available_providers)} providers: {[p.value for p, _ in available_providers]}")
@@ -609,13 +646,16 @@ async def generate(task: TaskRequest):
                 client = AIClient(provider, api_key, model)
 
                 # Generate answer
-                answer = await writer_variant(research_notes, client, short=False)
+                answer, tokens = await writer_variant(research_notes, client, short=False)
 
                 return ProviderResult(
                     provider=provider.value,
                     model=model,
                     answer=answer,
-                    error=None
+                    error=None,
+                    tokens_used=tokens.get("total_tokens", 0),
+                    prompt_tokens=tokens.get("prompt_tokens", 0),
+                    completion_tokens=tokens.get("completion_tokens", 0)
                 )
             except Exception as e:
                 logger.warning(f"Provider {provider.value} failed: {str(e)}")
@@ -623,7 +663,10 @@ async def generate(task: TaskRequest):
                     provider=provider.value,
                     model=PROVIDER_CONFIGS[provider]["default_model"],
                     answer="",
-                    error=str(e)[:200]
+                    error=str(e)[:200],
+                    tokens_used=0,
+                    prompt_tokens=0,
+                    completion_tokens=0
                 )
         
         # Run all providers in parallel
@@ -632,6 +675,11 @@ async def generate(task: TaskRequest):
             for provider, api_key in available_providers
         ]
         provider_results = await asyncio.gather(*provider_tasks)
+        
+        # Calculate total tokens from all providers
+        for result in provider_results:
+            if result.tokens_used:
+                total_tokens += result.tokens_used
         
         # Filter out results with errors for the critic (but keep them for display)
         successful_results = [r for r in provider_results if not r.error]
@@ -668,7 +716,9 @@ async def generate(task: TaskRequest):
             provider_results=provider_results,
             critic_report=critic_report,
             winning_provider=winning_provider,
-            winning_model=winning_model
+            winning_model=winning_model,
+            prompt_type=prompt_type.value,
+            total_tokens=total_tokens
         )
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is

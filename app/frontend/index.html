@@ -377,6 +377,143 @@
     
     .badge.success { background: #d1fae5; color: #065f46; }
     
+    /* Token Tracker Sidebar */
+    .app-layout {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 2rem;
+      align-items: start;
+    }
+    
+    .token-sidebar {
+      position: sticky;
+      top: 2rem;
+    }
+    
+    .token-tracker {
+      background: var(--bg-primary);
+      border-radius: 1rem;
+      box-shadow: var(--shadow-xl);
+      padding: 1.5rem;
+    }
+    
+    .token-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid var(--border);
+    }
+    
+    .token-header h3 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    
+    .token-icon {
+      font-size: 1.5rem;
+    }
+    
+    .token-summary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      padding: 1rem;
+      border-radius: 0.75rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+    
+    .token-summary-label {
+      font-size: 0.75rem;
+      opacity: 0.9;
+      margin-bottom: 0.25rem;
+    }
+    
+    .token-summary-value {
+      font-size: 2rem;
+      font-weight: 700;
+    }
+    
+    .token-provider {
+      background: var(--bg-secondary);
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+      border-left: 4px solid transparent;
+    }
+    
+    .token-provider.openai { border-left-color: #10a37f; }
+    .token-provider.gemini { border-left-color: #4285f4; }
+    .token-provider.deepseek { border-left-color: #7c3aed; }
+    
+    .token-provider-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+    
+    .token-provider-name {
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: var(--text-primary);
+    }
+    
+    .token-provider-model {
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+      margin-bottom: 0.75rem;
+    }
+    
+    .token-breakdown {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+    }
+    
+    .token-stat {
+      background: var(--bg-primary);
+      padding: 0.5rem;
+      border-radius: 0.375rem;
+    }
+    
+    .token-stat-label {
+      color: var(--text-tertiary);
+      margin-bottom: 0.125rem;
+    }
+    
+    .token-stat-value {
+      color: var(--text-primary);
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+    
+    .prompt-type-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #667eea15, #764ba215);
+      color: var(--primary-dark);
+      padding: 0.5rem 1rem;
+      border-radius: 2rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      text-align: center;
+    }
+    
+    @media (max-width: 1024px) {
+      .app-layout {
+        grid-template-columns: 1fr;
+      }
+      
+      .token-sidebar {
+        position: static;
+        order: 2;
+      }
+    }
+    
     @media (max-width: 768px) {
       .header h1 { font-size: 1.75rem; }
       .header .subtitle { font-size: 1rem; }
@@ -413,6 +550,31 @@
         <span>📝 Compare & Select Best</span>
       </div>
     </div>
+    
+    <div class="app-layout">
+      <!-- Token Tracker Sidebar -->
+      <div class="token-sidebar">
+        <div class="token-tracker">
+          <div class="token-header">
+            <span class="token-icon">📊</span>
+            <h3>Token Usage</h3>
+          </div>
+          
+          <div class="token-summary">
+            <div class="token-summary-label">Total Tokens</div>
+            <div class="token-summary-value" id="total-tokens">0</div>
+          </div>
+          
+          <div id="prompt-type-display"></div>
+          
+          <div id="token-providers">
+            <!-- Provider token breakdown will be added here dynamically -->
+          </div>
+        </div>
+      </div>
+      
+      <!-- Main Content -->
+      <div class="main-content">
     
     <div class="main-card">
       <!-- API Keys Section -->
@@ -548,7 +710,9 @@
         <div id="meta-info" class="meta-info"></div>
       </div>
     </div>
-  </div>
+    </div> <!-- end main-content -->
+    </div> <!-- end app-layout -->
+  </div> <!-- end container -->
 
 <script src="/static/app.js"></script>
 </body>

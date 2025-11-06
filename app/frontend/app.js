@@ -138,6 +138,57 @@ function hideStatus() {
   elements.status.classList.remove("show");
 }
 
+// Update token tracker display
+function updateTokenDisplay(data) {
+  // Update total tokens
+  const totalTokensEl = document.getElementById("total-tokens");
+  if (totalTokensEl && data.total_tokens !== undefined) {
+    totalTokensEl.textContent = data.total_tokens.toLocaleString();
+  }
+  
+  // Update prompt type
+  const promptTypeEl = document.getElementById("prompt-type-display");
+  if (promptTypeEl && data.prompt_type) {
+    promptTypeEl.textContent = data.prompt_type;
+  }
+  
+  // Update provider breakdown
+  const tokenProvidersEl = document.getElementById("token-providers");
+  if (tokenProvidersEl && data.provider_results) {
+    tokenProvidersEl.innerHTML = "";
+    
+    data.provider_results.forEach(result => {
+      if (!result.error && result.tokens_used !== undefined) {
+        const providerDiv = document.createElement("div");
+        providerDiv.className = "provider-token";
+        
+        const isWinner = result.provider === data.winning_provider;
+        const winnerIcon = isWinner ? "👑 " : "";
+        
+        providerDiv.innerHTML = `
+          <div class="provider-name">${winnerIcon}${result.provider}</div>
+          <div class="token-details">
+            <div class="token-row">
+              <span class="token-label">Total:</span>
+              <span class="token-value">${result.tokens_used.toLocaleString()}</span>
+            </div>
+            <div class="token-row">
+              <span class="token-label">Prompt:</span>
+              <span class="token-value">${result.prompt_tokens?.toLocaleString() || "—"}</span>
+            </div>
+            <div class="token-row">
+              <span class="token-label">Completion:</span>
+              <span class="token-value">${result.completion_tokens?.toLocaleString() || "—"}</span>
+            </div>
+          </div>
+        `;
+        
+        tokenProvidersEl.appendChild(providerDiv);
+      }
+    });
+  }
+}
+
 // Build API request
 function buildRequest() {
   const provider = elements.provider.value;
@@ -195,6 +246,9 @@ async function generate() {
     }
     
     const data = await response.json();
+    
+    // Update token tracker
+    updateTokenDisplay(data);
     
     // Show results with smooth transition
     elements.results.style.display = "block";
