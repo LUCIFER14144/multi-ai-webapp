@@ -39,14 +39,15 @@ PROVIDER_CONFIGS = {
         "models": ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo", "gpt-4-turbo"]
     },
     AIProvider.GEMINI: {
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/models",
         "default_model": "gemini-1.5-flash",
         "models": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"]
     },
     AIProvider.DEEPSEEK: {
         "base_url": "https://api.deepseek.com/v1/chat/completions",
         "default_model": "deepseek-chat",
-        "models": ["deepseek-chat", "deepseek-coder"]
+        "models": ["deepseek-chat", "deepseek-coder"],
+        "requires_payment": True  # DeepSeek has no free tier
     }
 }
 
@@ -170,18 +171,18 @@ class AIClient:
     async def _gemini_chat(self, messages: List[Dict], temperature: float, max_tokens: int) -> str:
         """Google Gemini implementation"""
         # Convert messages to Gemini format
-        gemini_messages = []
+        gemini_contents = []
         for msg in messages:
             role = "user" if msg["role"] == "user" else "model"
-            gemini_messages.append({
+            gemini_contents.append({
                 "role": role,
                 "parts": [{"text": msg["content"]}]
             })
         
-        url = self.config["base_url"].format(model=self.model)
+        url = f"{self.config['base_url']}/{self.model}:generateContent?key={self.api_key}"
         headers = {"Content-Type": "application/json"}
         payload = {
-            "contents": gemini_messages,
+            "contents": gemini_contents,
             "generationConfig": {
                 "temperature": temperature,
                 "maxOutputTokens": max_tokens,
@@ -189,7 +190,7 @@ class AIClient:
         }
         
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(f"{url}?key={self.api_key}", headers=headers, json=payload)
+            response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
             return data["candidates"][0]["content"]["parts"][0]["text"].strip()
@@ -473,7 +474,9 @@ async def get_providers():
             provider.value: {
                 "name": provider.value.title(),
                 "models": config["models"],
-                "default_model": config["default_model"]
+                "default_model": config["default_model"],
+                "requires_payment": config.get("requires_payment", False),
+                "free_tier": not config.get("requires_payment", False)
             }
             for provider, config in PROVIDER_CONFIGS.items()
         }
