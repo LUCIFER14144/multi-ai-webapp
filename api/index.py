@@ -41,6 +41,10 @@ except Exception as e:
 try:
     from app.main import app
     from mangum import Mangum
+
+    # Export FastAPI app directly for Vercel Python runtime compatibility
+    # Vercel will look for an 'app' object; Mangum handler kept for Lambda-style invocation if needed
+    vercel_app = app  # alias to be explicit
     
     # Log environment for debugging
     logger.info("Python version: " + sys.version)
@@ -48,15 +52,14 @@ try:
     logger.info("Contents of current directory: " + str(os.listdir(".")))
     logger.info("Contents of app directory: " + str(os.listdir("app")))
     
-    # Create handler with debug mode
+    # Create handler (no base path for Vercel)
     handler = Mangum(
         app,
         lifespan="off",
-        api_gateway_base_path="/api",
-        strip_base_path=False,
+        strip_base_path=True,
         debug=True
     )
-    logger.info("Mangum handler created successfully with debug mode enabled")
+    logger.info("Mangum handler created successfully (Vercel)")
     
 except Exception as e:
     # If import fails, create a simple error handler

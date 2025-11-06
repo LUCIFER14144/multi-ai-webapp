@@ -81,27 +81,34 @@ app.add_middleware(
 try:
     frontend_dir = os.path.join(Path(__file__).parent, "frontend")
     if os.path.exists(frontend_dir):
-        # Mount static files at /static for assets
+        # Serve assets from /static
         app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
-        # Mount index.html and other root files at /
-        app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="root")
-        logger.info(f"Static files mounted from {frontend_dir}")
+        logger.info(f"Static assets mounted from {frontend_dir}")
     else:
         logger.warning(f"Frontend directory not found at {frontend_dir}")
 except Exception as e:
     logger.error(f"Failed to mount static files: {e}")
 
-# Add a catch-all route for the SPA
+# Serve SPA index for root
+@app.get("/")
+async def serve_index():
+    frontend_dir = os.path.join(Path(__file__).parent, "frontend")
+    index_path = os.path.join(frontend_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return JSONResponse(status_code=404, content={"error": "Frontend index.html not found"})
+
+# Catch-all for SPA (but do NOT intercept API routes)
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
+    # Let API routes pass through
+    if full_path.startswith("api/") or full_path == "api":
+        raise HTTPException(status_code=404)
     frontend_dir = os.path.join(Path(__file__).parent, "frontend")
-    if os.path.exists(os.path.join(frontend_dir, "index.html")):
-        return FileResponse(os.path.join(frontend_dir, "index.html"))
-    else:
-        return JSONResponse(
-            status_code=404,
-            content={"error": "Frontend not found", "path": full_path}
-        )
+    index_path = os.path.join(frontend_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return JSONResponse(status_code=404, content={"error": "Frontend not found", "path": full_path})
 
 class APIKeys(BaseModel):
     openai: Optional[str] = None
