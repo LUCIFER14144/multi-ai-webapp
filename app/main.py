@@ -12,10 +12,13 @@ import os
 import asyncio
 import logging
 import re
+import sys
+from pathlib import Path
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.exception_handlers import http_exception_handler
 from pydantic import BaseModel, validator
 from fastapi.middleware.cors import CORSMiddleware
 import openai
@@ -57,6 +60,16 @@ logger = logging.getLogger("multi-ai")
 
 app = FastAPI(title="Multi-AI Orchestrator API")
 
+# Global error handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = f"Internal server error: {str(exc)}"
+    logging.error(f"Global error handler caught: {error_msg}")
+    return JSONResponse(
+        status_code=500,
+        content={"error": error_msg, "path": request.url.path}
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, replace with specific domains
@@ -65,6 +78,13 @@ app.add_middleware(
 )
 
 # Mount static files - with error handling for serverless
+try:
+    frontend_dir = os.path.join(Path(__file__).parent, "frontend")
+    if os.path.exists(frontend_dir):
+        app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="static")
+        logger.info(f"Static files mounted from {frontend_dir}")
+    else:
+        logger.warning(f"Frontend directory not found at {frontend_dir}")
 import os
 static_dir = os.path.join(os.path.dirname(__file__), "frontend")
 if os.path.exists(static_dir):
