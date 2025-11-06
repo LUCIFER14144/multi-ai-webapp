@@ -88,26 +88,14 @@ try:
 except Exception as e:
     logger.error(f"Failed to mount static files: {e}")
 
-# Serve SPA index for root
+# Serve SPA index for root only (no catch-all that might mask /api/*)
 @app.get("/")
 async def serve_index():
     frontend_dir = os.path.join(Path(__file__).parent, "frontend")
     index_path = os.path.join(frontend_dir, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
-    return JSONResponse(status_code=404, content={"error": "Frontend index.html not found"})
-
-# Catch-all for SPA (but do NOT intercept API routes)
-@app.get("/{full_path:path}")
-async def serve_spa(full_path: str):
-    # Let API routes pass through
-    if full_path.startswith("api/") or full_path == "api":
-        raise HTTPException(status_code=404)
-    frontend_dir = os.path.join(Path(__file__).parent, "frontend")
-    index_path = os.path.join(frontend_dir, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return JSONResponse(status_code=404, content={"error": "Frontend not found", "path": full_path})
+    return {"message": "Multi-AI Webapp", "status": "running", "docs": "/docs"}
 
 # Local run helper
 if __name__ == "__main__":
