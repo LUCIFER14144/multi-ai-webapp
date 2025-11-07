@@ -41,7 +41,11 @@ class MultiAIDashboard {
     this.token = localStorage.getItem('token');
     const userData = localStorage.getItem('user');
     
+    console.log('Dashboard init - Token:', this.token ? this.token.substring(0, 20) + '...' : 'None');
+    console.log('Dashboard init - User data:', userData);
+    
     if (!this.token || !userData) {
+      console.log('No token or user data, redirecting to auth');
       window.location.href = '/auth.html';
       return;
     }
@@ -61,14 +65,21 @@ class MultiAIDashboard {
   
   async verifyAuth() {
     try {
+      console.log('Verifying auth with token:', this.token ? this.token.substring(0, 20) + '...' : 'None');
       const response = await this.apiCall('/api/auth/me', 'GET');
+      console.log('Auth verification response status:', response.status);
+      
       if (response.ok) {
         this.user = await response.json();
         localStorage.setItem('user', JSON.stringify(this.user));
+        console.log('Auth verification successful:', this.user.username);
       } else {
-        throw new Error('Authentication failed');
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        console.error('Auth verification failed:', errorData);
+        throw new Error('Authentication failed: ' + errorData.detail);
       }
     } catch (error) {
+      console.error('Auth verification error:', error);
       throw new Error('Auth verification failed');
     }
   }
