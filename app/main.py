@@ -7,7 +7,6 @@ Includes:
  - retries with tenacity
  - optional hook for LangChain/AutoGen orchestration (placeholder)
  - simple frontend to call the API
- - user authentication and chat history
 """
 import os
 import asyncio
@@ -16,31 +15,98 @@ import re
 import sys
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from datetime import timedelta
-from fastapi import FastAPI, HTTPException, Request, Depends
+from datetime import datetime, timedelta
+from fastapi import FastAPI, HTTPException, Request, Depends, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, validator, EmailStr
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, validator
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 import openai
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import httpx
 import json
 from enum import Enum
-
-# Import database and auth
-from app.database import init_db, get_db, User, ChatHistory
-from app.auth import (
-    get_password_hash,
-    verify_password,
-    create_access_token,
-    get_current_user,
-    ACCESS_TOKEN_EXPIRE_MINUTES
-)
+import jwt
+import hashlib
+import uuid
 
 # Configuration
 MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "800"))
+JWT_SECRET = os.environ.get("JWT_SECRET", "your-secret-key-change-this-in-production")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRATION_HOURS = 24
+
+# Simple in-memory storage (replace with database in production)
+users_db = {}
+user_history_db = {}
+
+# Auth models
+class UserRegister(BaseModel):
+    username: str
+    email: str
+    password: str
+    
+    @validator('username')
+    def username_alphanumeric(cls, v):
+        if not re.match("^[a-zA-Z0-9_]{3,20}$", v):
+            raise ValueError('Username must be 3-20 characters, alphanumeric and underscore only')
+        return v
+    
+    @validator('email')
+    def email_valid(cls, v):
+        if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", v):
+            raise ValueError('Invalid email format')
+        return v
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+class UserResponse(BaseModel):
+    username: str
+    email: str
+    created_at: datetime
+
+class HistoryEntry(BaseModel):
+    id: str
+    prompt: str
+    prompt_type: str
+    winning_provider: str
+    winning_model: str
+    total_tokens: int
+    timestamp: datetime
+    response_summary: str
+
+# Auth helper functions
+security = HTTPBearer()
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password: str, hashed: str) -> bool:
+    return hash_password(password) == hashed
+
+def create_access_token(username: str) -> str:
+    expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
+    payload = {
+        "sub": username,
+        "exp": expire,
+        "iat": datetime.utcnow()
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        username = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        return username
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+    except jwt.JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 class AIProvider(str, Enum):
     OPENAI = "openai"
@@ -71,12 +137,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("multi-ai")
 
 app = FastAPI(title="Multi-AI Orchestrator API")
-
-# Initialize database on startup
-@app.on_event("startup")
-async def startup_event():
-    init_db()
-    logger.info("Database initialized")
 
 # Global error handler
 @app.exception_handler(Exception)
@@ -111,7 +171,7 @@ except Exception as e:
 @app.get("/")
 async def serve_index():
     frontend_dir = os.path.join(Path(__file__).parent, "frontend")
-    index_path = os.path.join(frontend_dir, "index-new.html")
+    index_path = os.path.join(frontend_dir, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return {"message": "Multi-AI Webapp", "status": "running", "docs": "/docs"}
@@ -166,59 +226,6 @@ class TaskResponse(BaseModel):
     winning_model: str
     prompt_type: str  # Detected prompt type
     total_tokens: int  # Total tokens across all providers
-
-# --- Authentication Models ---
-class UserRegister(BaseModel):
-    email: EmailStr
-    username: str
-    password: str
-    
-    @validator('username')
-    def validate_username(cls, v):
-        if len(v) < 3:
-            raise ValueError("Username must be at least 3 characters long")
-        if len(v) > 50:
-            raise ValueError("Username too long (max 50 characters)")
-        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
-            raise ValueError("Username can only contain letters, numbers, hyphens and underscores")
-        return v.strip()
-    
-    @validator('password')
-    def validate_password(cls, v):
-        if len(v) < 6:
-            raise ValueError("Password must be at least 6 characters long")
-        if len(v) > 100:
-            raise ValueError("Password too long (max 100 characters)")
-        return v
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-class UserResponse(BaseModel):
-    id: int
-    email: str
-    username: str
-    
-    class Config:
-        from_attributes = True
-
-class ChatHistoryResponse(BaseModel):
-    id: int
-    prompt: str
-    prompt_type: Optional[str]
-    winning_provider: Optional[str]
-    winning_model: Optional[str]
-    final_answer: Optional[str]
-    total_tokens: int
-    created_at: str
-    
-    class Config:
-        from_attributes = True
 
 # --- Prompt-aware model selection ---
 class PromptType(str, Enum):
@@ -667,11 +674,7 @@ async def multi_judge_vote(research_notes: str, provider_results: List[ProviderR
     return aggregated_analysis, avg_scores, winner, merged_answer
 
 @app.post("/api/generate", response_model=TaskResponse)
-async def generate(
-    task: TaskRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+async def generate(task: TaskRequest, current_user: str = Depends(verify_token)):
     """
     Multi-provider competition: Run all available providers, compare results, and select the best answer.
     """
@@ -786,18 +789,24 @@ async def generate(
         winner_result = next((r for r in provider_results if r.provider == winning_provider), successful_results[0])
         winning_model = winner_result.model
         
-        # Save to chat history
-        chat_entry = ChatHistory(
-            user_id=current_user.id,
-            prompt=task.prompt,
+        # Save to user history
+        history_entry = HistoryEntry(
+            id=str(uuid.uuid4()),
+            prompt=task.prompt[:200] + "..." if len(task.prompt) > 200 else task.prompt,
             prompt_type=prompt_type.value,
             winning_provider=winning_provider,
             winning_model=winning_model,
-            final_answer=final_answer,
-            total_tokens=total_tokens
+            total_tokens=total_tokens,
+            timestamp=datetime.utcnow(),
+            response_summary=final_answer[:300] + "..." if len(final_answer) > 300 else final_answer
         )
-        db.add(chat_entry)
-        db.commit()
+        
+        if current_user not in user_history_db:
+            user_history_db[current_user] = []
+        user_history_db[current_user].insert(0, history_entry.dict())  # Most recent first
+        
+        # Keep only last 50 entries per user
+        user_history_db[current_user] = user_history_db[current_user][:50]
         
         return TaskResponse(
             final_answer=final_answer,
@@ -862,107 +871,46 @@ async def generate(
 
 @app.get("/")
 async def root():
-    """Serve the frontend interface"""
+    """Serve the dashboard (requires authentication)"""
     try:
-        html_path = os.path.join(os.path.dirname(__file__), "frontend", "index.html")
+        html_path = os.path.join(os.path.dirname(__file__), "frontend", "dashboard.html")
         if os.path.exists(html_path):
             return FileResponse(html_path)
         else:
             return {"message": "Multi-AI Webapp API", "status": "running", "docs": "/docs"}
     except Exception as e:
-        logger.error(f"Error serving root: {e}")
+        logger.error(f"Error serving dashboard: {e}")
         return {"message": "Multi-AI Webapp API", "status": "running", "docs": "/docs"}
+
+@app.get("/auth.html")
+async def auth_page():
+    """Serve the authentication page"""
+    try:
+        html_path = os.path.join(os.path.dirname(__file__), "frontend", "auth.html")
+        if os.path.exists(html_path):
+            return FileResponse(html_path)
+        else:
+            raise HTTPException(status_code=404, detail="Auth page not found")
+    except Exception as e:
+        logger.error(f"Error serving auth page: {e}")
+        raise HTTPException(status_code=500, detail="Error loading auth page")
+
+@app.get("/dashboard.js")
+async def dashboard_js():
+    """Serve the dashboard JavaScript"""
+    try:
+        js_path = os.path.join(os.path.dirname(__file__), "frontend", "dashboard.js")
+        if os.path.exists(js_path):
+            return FileResponse(js_path, media_type="application/javascript")
+        else:
+            raise HTTPException(status_code=404, detail="Dashboard JS not found")
+    except Exception as e:
+        logger.error(f"Error serving dashboard JS: {e}")
+        raise HTTPException(status_code=500, detail="Error loading dashboard JS")
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
-# --- Authentication Endpoints ---
-
-@app.post("/api/auth/register", response_model=Token)
-async def register(user_data: UserRegister, db: Session = Depends(get_db)):
-    """Register a new user"""
-    # Check if email already exists
-    if db.query(User).filter(User.email == user_data.email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Check if username already exists
-    if db.query(User).filter(User.username == user_data.username).first():
-        raise HTTPException(status_code=400, detail="Username already taken")
-    
-    # Create new user
-    hashed_password = get_password_hash(user_data.password)
-    new_user = User(
-        email=user_data.email,
-        username=user_data.username,
-        hashed_password=hashed_password
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    # Create access token
-    access_token = create_access_token(
-        data={"sub": new_user.id},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    
-    return {"access_token": access_token, "token_type": "bearer"}
-
-
-@app.post("/api/auth/login", response_model=Token)
-async def login(user_data: UserLogin, db: Session = Depends(get_db)):
-    """Login user"""
-    user = db.query(User).filter(User.email == user_data.email).first()
-    
-    if not user or not verify_password(user_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=401,
-            detail="Incorrect email or password"
-        )
-    
-    # Create access token
-    access_token = create_access_token(
-        data={"sub": user.id},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    
-    return {"access_token": access_token, "token_type": "bearer"}
-
-
-@app.get("/api/auth/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user)):
-    """Get current user information"""
-    return current_user
-
-
-@app.get("/api/history", response_model=List[ChatHistoryResponse])
-async def get_chat_history(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    limit: int = 50
-):
-    """Get user's chat history"""
-    history = db.query(ChatHistory)\
-        .filter(ChatHistory.user_id == current_user.id)\
-        .order_by(ChatHistory.created_at.desc())\
-        .limit(limit)\
-        .all()
-    
-    return [
-        {
-            "id": h.id,
-            "prompt": h.prompt,
-            "prompt_type": h.prompt_type,
-            "winning_provider": h.winning_provider,
-            "winning_model": h.winning_model,
-            "final_answer": h.final_answer,
-            "total_tokens": h.total_tokens,
-            "created_at": h.created_at.isoformat()
-        }
-        for h in history
-    ]
-
 
 @app.get("/api/providers")
 async def get_providers():
@@ -1008,6 +956,80 @@ async def validate_api_key(provider: str, api_key: str):
         return {"valid": False, "message": "Provider not supported for validation"}
     except Exception as e:
         return {"valid": False, "message": str(e)}
+
+# Authentication routes
+@app.post("/api/auth/register")
+async def register(user: UserRegister):
+    # Check if username already exists
+    if user.username in users_db:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    # Check if email already exists
+    for existing_user in users_db.values():
+        if existing_user["email"] == user.email:
+            raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create user
+    user_data = {
+        "username": user.username,
+        "email": user.email,
+        "password": hash_password(user.password),
+        "created_at": datetime.utcnow()
+    }
+    users_db[user.username] = user_data
+    user_history_db[user.username] = []
+    
+    # Create token
+    token = create_access_token(user.username)
+    
+    return {
+        "user": UserResponse(
+            username=user.username,
+            email=user.email,
+            created_at=user_data["created_at"]
+        ),
+        "token": token
+    }
+
+@app.post("/api/auth/login")
+async def login(user: UserLogin):
+    # Check if user exists
+    if user.username not in users_db:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    user_data = users_db[user.username]
+    
+    # Verify password
+    if not verify_password(user.password, user_data["password"]):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    # Create token
+    token = create_access_token(user.username)
+    
+    return {
+        "user": UserResponse(
+            username=user_data["username"],
+            email=user_data["email"],
+            created_at=user_data["created_at"]
+        ),
+        "token": token
+    }
+
+@app.get("/api/auth/me")
+async def get_current_user(current_user: str = Depends(verify_token)):
+    if current_user not in users_db:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user_data = users_db[current_user]
+    return UserResponse(
+        username=user_data["username"],
+        email=user_data["email"],
+        created_at=user_data["created_at"]
+    )
+
+@app.get("/api/auth/history")
+async def get_user_history(current_user: str = Depends(verify_token)):
+    return user_history_db.get(current_user, [])
 
 # Optional hooks for LangChain/AutoGen (placeholders)
 # If you want to integrate LangChain or AutoGen orchestration, add that logic below.

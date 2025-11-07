@@ -1,296 +1,443 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-AI Webapp - Login</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-
-        .auth-container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            width: 100%;
-            max-width: 450px;
-            overflow: hidden;
-        }
-
-        .auth-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 40px 30px;
-            text-align: center;
-        }
-
-        .auth-header h1 {
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-
-        .auth-header p {
-            font-size: 16px;
-            opacity: 0.9;
-        }
-
-        .auth-body {
-            padding: 40px 30px;
-        }
-
-        .tab-buttons {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 30px;
-            background: #f0f0f0;
-            border-radius: 10px;
-            padding: 5px;
-        }
-
-        .tab-btn {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            background: transparent;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            color: #666;
-        }
-
-        .tab-btn.active {
-            background: white;
-            color: #667eea;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
-            font-size: 14px;
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 14px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            font-size: 16px;
-            transition: all 0.3s ease;
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .submit-btn {
-            width: 100%;
-            padding: 16px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 18px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-top: 10px;
-        }
-
-        .submit-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
-        }
-
-        .submit-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .auth-form {
-            display: none;
-        }
-
-        .auth-form.active {
-            display: block;
-        }
-
-        .error-message {
-            background: #fee;
-            color: #c33;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            display: none;
-        }
-
-        .error-message.show {
-            display: block;
-        }
-
-        .success-message {
-            background: #efe;
-            color: #3c3;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            display: none;
-        }
-
-        .success-message.show {
-            display: block;
-        }
-
-        .password-strength {
-            margin-top: 8px;
-            font-size: 12px;
-            display: none;
-        }
-
-        .password-strength.show {
-            display: block;
-        }
-
-        .strength-bar {
-            height: 4px;
-            background: #e0e0e0;
-            border-radius: 2px;
-            margin-top: 5px;
-            overflow: hidden;
-        }
-
-        .strength-fill {
-            height: 100%;
-            width: 0;
-            transition: all 0.3s ease;
-        }
-
-        .strength-weak { width: 33%; background: #f44336; }
-        .strength-medium { width: 66%; background: #ff9800; }
-        .strength-strong { width: 100%; background: #4caf50; }
-
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 0.8s linear infinite;
-            margin-left: 10px;
-            display: none;
-        }
-
-        .spinner.show {
-            display: inline-block;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        @media (max-width: 480px) {
-            .auth-header h1 {
-                font-size: 24px;
-            }
-            
-            .auth-body {
-                padding: 30px 20px;
-            }
-        }
-    </style>
+  <meta charset="utf-8"/>
+  <title>Multi-AI Orchestrator - Login</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --primary-light: #818cf8;
+      --success: #10b981;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --bg-primary: #ffffff;
+      --bg-secondary: #f9fafb;
+      --text-primary: #111827;
+      --text-secondary: #6b7280;
+      --border: #e5e7eb;
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      color: var(--text-primary);
+    }
+    
+    .auth-container {
+      background: var(--bg-primary);
+      padding: 3rem;
+      border-radius: 1rem;
+      box-shadow: var(--shadow-lg);
+      width: 100%;
+      max-width: 400px;
+      backdrop-filter: blur(10px);
+    }
+    
+    .auth-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    
+    .auth-header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+    }
+    
+    .auth-header p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+    
+    .auth-tabs {
+      display: flex;
+      background: var(--bg-secondary);
+      border-radius: 0.5rem;
+      padding: 0.25rem;
+      margin-bottom: 2rem;
+    }
+    
+    .auth-tab {
+      flex: 1;
+      padding: 0.75rem;
+      text-align: center;
+      border: none;
+      background: transparent;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    
+    .auth-tab.active {
+      background: var(--primary);
+      color: white;
+    }
+    
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+    
+    .form-label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    
+    .form-input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      transition: border-color 0.2s;
+    }
+    
+    .form-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    
+    .auth-button {
+      width: 100%;
+      padding: 0.875rem;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    
+    .auth-button:hover {
+      background: var(--primary-dark);
+    }
+    
+    .auth-button:disabled {
+      background: var(--text-secondary);
+      cursor: not-allowed;
+    }
+    
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid transparent;
+      border-top: 2px solid white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .status-banner {
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+      text-align: center;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: all 0.3s;
+    }
+    
+    .status-banner.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    .status-banner.success {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+    
+    .status-banner.error {
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+    
+    .auth-form {
+      display: none;
+    }
+    
+    .auth-form.active {
+      display: block;
+    }
+    
+    .password-requirements {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin-top: 0.5rem;
+    }
+    
+    .requirement {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+    
+    .requirement.valid {
+      color: var(--success);
+    }
+    
+    .requirement.invalid {
+      color: var(--error);
+    }
+  </style>
 </head>
 <body>
-    <div class="auth-container">
-        <div class="auth-header">
-            <h1>🤖 Multi-AI Webapp</h1>
-            <p>Harness the power of multiple AI models</p>
-        </div>
-        
-        <div class="auth-body">
-            <div class="tab-buttons">
-                <button class="tab-btn active" data-tab="login">Login</button>
-                <button class="tab-btn" data-tab="register">Register</button>
-            </div>
-
-            <div class="error-message" id="error-message"></div>
-            <div class="success-message" id="success-message"></div>
-
-            <!-- Login Form -->
-            <form class="auth-form active" id="login-form">
-                <div class="form-group">
-                    <label for="login-email">Email</label>
-                    <input type="email" id="login-email" placeholder="your@email.com" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="login-password">Password</label>
-                    <input type="password" id="login-password" placeholder="••••••••" required>
-                </div>
-
-                <button type="submit" class="submit-btn">
-                    Login
-                    <span class="spinner"></span>
-                </button>
-            </form>
-
-            <!-- Register Form -->
-            <form class="auth-form" id="register-form">
-                <div class="form-group">
-                    <label for="register-username">Username</label>
-                    <input type="text" id="register-username" placeholder="johndoe" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="register-email">Email</label>
-                    <input type="email" id="register-email" placeholder="your@email.com" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="register-password">Password</label>
-                    <input type="password" id="register-password" placeholder="••••••••" required>
-                    <div class="password-strength" id="password-strength">
-                        <div class="strength-bar">
-                            <div class="strength-fill" id="strength-fill"></div>
-                        </div>
-                        <span id="strength-text"></span>
-                    </div>
-                </div>
-
-                <button type="submit" class="submit-btn">
-                    Create Account
-                    <span class="spinner"></span>
-                </button>
-            </form>
-        </div>
+  <div class="auth-container">
+    <div class="auth-header">
+      <h1>🤖 Multi-AI</h1>
+      <p>Access your intelligent AI orchestrator</p>
     </div>
+    
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-tab="login">Login</button>
+      <button class="auth-tab" data-tab="register">Register</button>
+    </div>
+    
+    <div id="status" class="status-banner"></div>
+    
+    <!-- Login Form -->
+    <form id="login-form" class="auth-form active">
+      <div class="form-group">
+        <label class="form-label" for="login-username">Username</label>
+        <input type="text" id="login-username" class="form-input" required>
+      </div>
+      
+      <div class="form-group">
+        <label class="form-label" for="login-password">Password</label>
+        <input type="password" id="login-password" class="form-input" required>
+      </div>
+      
+      <button type="submit" id="login-button" class="auth-button">
+        <span id="login-text">Sign In</span>
+        <div id="login-spinner" class="spinner" style="display: none;"></div>
+      </button>
+    </form>
+    
+    <!-- Register Form -->
+    <form id="register-form" class="auth-form">
+      <div class="form-group">
+        <label class="form-label" for="register-username">Username</label>
+        <input type="text" id="register-username" class="form-input" required>
+      </div>
+      
+      <div class="form-group">
+        <label class="form-label" for="register-email">Email</label>
+        <input type="email" id="register-email" class="form-input" required>
+      </div>
+      
+      <div class="form-group">
+        <label class="form-label" for="register-password">Password</label>
+        <input type="password" id="register-password" class="form-input" required>
+        <div class="password-requirements">
+          <div class="requirement" id="req-length">
+            <span>•</span> At least 6 characters
+          </div>
+        </div>
+      </div>
+      
+      <button type="submit" id="register-button" class="auth-button">
+        <span id="register-text">Create Account</span>
+        <div id="register-spinner" class="spinner" style="display: none;"></div>
+      </button>
+    </form>
+  </div>
 
-    <script src="auth.js"></script>
+  <script>
+    // DOM elements
+    const elements = {
+      tabs: document.querySelectorAll('.auth-tab'),
+      loginForm: document.getElementById('login-form'),
+      registerForm: document.getElementById('register-form'),
+      status: document.getElementById('status'),
+      loginButton: document.getElementById('login-button'),
+      registerButton: document.getElementById('register-button'),
+      loginText: document.getElementById('login-text'),
+      registerText: document.getElementById('register-text'),
+      loginSpinner: document.getElementById('login-spinner'),
+      registerSpinner: document.getElementById('register-spinner')
+    };
+    
+    // Tab switching
+    elements.tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
+        
+        // Update active tab
+        elements.tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // Show corresponding form
+        elements.loginForm.classList.toggle('active', tabName === 'login');
+        elements.registerForm.classList.toggle('active', tabName === 'register');
+        
+        // Clear status
+        hideStatus();
+      });
+    });
+    
+    // Password validation
+    const passwordInput = document.getElementById('register-password');
+    const lengthReq = document.getElementById('req-length');
+    
+    passwordInput.addEventListener('input', () => {
+      const password = passwordInput.value;
+      const hasLength = password.length >= 6;
+      
+      lengthReq.classList.toggle('valid', hasLength);
+      lengthReq.classList.toggle('invalid', !hasLength);
+    });
+    
+    // Form submissions
+    elements.loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await handleLogin();
+    });
+    
+    elements.registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await handleRegister();
+    });
+    
+    // Auth functions
+    async function handleLogin() {
+      const username = document.getElementById('login-username').value.trim();
+      const password = document.getElementById('login-password').value;
+      
+      if (!username || !password) {
+        showStatus('Please fill in all fields', 'error');
+        return;
+      }
+      
+      setLoading(true, 'login');
+      
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          showStatus('Login successful! Redirecting...', 'success');
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 1000);
+        } else {
+          showStatus(data.detail || 'Login failed', 'error');
+        }
+      } catch (error) {
+        showStatus('Network error. Please try again.', 'error');
+      } finally {
+        setLoading(false, 'login');
+      }
+    }
+    
+    async function handleRegister() {
+      const username = document.getElementById('register-username').value.trim();
+      const email = document.getElementById('register-email').value.trim();
+      const password = document.getElementById('register-password').value;
+      
+      if (!username || !email || !password) {
+        showStatus('Please fill in all fields', 'error');
+        return;
+      }
+      
+      if (password.length < 6) {
+        showStatus('Password must be at least 6 characters', 'error');
+        return;
+      }
+      
+      setLoading(true, 'register');
+      
+      try {
+        const response = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username, email, password })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          showStatus('Account created! Redirecting...', 'success');
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 1000);
+        } else {
+          showStatus(data.detail || 'Registration failed', 'error');
+        }
+      } catch (error) {
+        showStatus('Network error. Please try again.', 'error');
+      } finally {
+        setLoading(false, 'register');
+      }
+    }
+    
+    function setLoading(loading, type) {
+      if (type === 'login') {
+        elements.loginButton.disabled = loading;
+        elements.loginText.style.display = loading ? 'none' : 'inline';
+        elements.loginSpinner.style.display = loading ? 'inline-block' : 'none';
+      } else {
+        elements.registerButton.disabled = loading;
+        elements.registerText.style.display = loading ? 'none' : 'inline';
+        elements.registerSpinner.style.display = loading ? 'inline-block' : 'none';
+      }
+    }
+    
+    function showStatus(message, type = 'info') {
+      elements.status.textContent = message;
+      elements.status.className = `status-banner show ${type}`;
+    }
+    
+    function hideStatus() {
+      elements.status.classList.remove('show');
+    }
+    
+    // Check if already logged in
+    if (localStorage.getItem('token')) {
+      window.location.href = '/';
+    }
+  </script>
 </body>
 </html>
