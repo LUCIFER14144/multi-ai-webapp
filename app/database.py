@@ -2,10 +2,13 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, F
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
+from pathlib import Path
 import os
 
-# Database setup
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./multi_ai_app.db")
+# Database setup - use app directory for SQLite file
+app_dir = Path(__file__).parent
+db_path = app_dir / "multi_ai_app.db"
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{db_path}")
 
 engine = create_engine(
     DATABASE_URL,
