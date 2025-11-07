@@ -79,7 +79,7 @@ class HistoryEntry(BaseModel):
     response_summary: str
 
 # Auth helper functions
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
@@ -97,15 +97,23 @@ def create_access_token(username: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    if credentials is None:
+        logger.error("No authorization header provided")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    
     try:
+        logger.info(f"Verifying token: {credentials.credentials[:20]}...")
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         username = payload.get("sub")
+        logger.info(f"Token payload: {payload}")
         if username is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
         return username
     except jwt.ExpiredSignatureError:
+        logger.error("Token expired")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
-    except jwt.JWTError:
+    except jwt.JWTError as e:
+        logger.error(f"JWT decode error: {e}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 class AIProvider(str, Enum):
@@ -867,8 +875,8 @@ async def generate(task: TaskRequest, current_user: str = Depends(verify_token))
         raise HTTPException(status_code=500, detail=f"Pipeline error: {error_msg[:300]}")
 
 @app.get("/dashboard")
-async def dashboard_page(current_user: str = Depends(verify_token)):
-    """Serve the dashboard (requires authentication)"""
+async def dashboard_page():
+    """Serve the dashboard HTML (authentication handled by JavaScript)"""
     try:
         html_path = os.path.join(os.path.dirname(__file__), "frontend", "dashboard.html")
         if os.path.exists(html_path):
@@ -978,6 +986,7 @@ async def register(user: UserRegister):
     
     # Create token
     token = create_access_token(user.username)
+    logger.info(f"Created token for user {user.username}: {token[:20]}...")
     
     return {
         "user": UserResponse(
@@ -1002,6 +1011,7 @@ async def login(user: UserLogin):
     
     # Create token
     token = create_access_token(user.username)
+    logger.info(f"Login token for user {user.username}: {token[:20]}...")
     
     return {
         "user": UserResponse(
@@ -1023,6 +1033,16 @@ async def get_current_user(current_user: str = Depends(verify_token)):
         email=user_data["email"],
         created_at=user_data["created_at"]
     )
+
+@app.get("/api/auth/debug")
+async def debug_auth(request: Request):
+    """Debug endpoint to check authentication headers"""
+    auth_header = request.headers.get("authorization")
+    return {
+        "has_auth_header": auth_header is not None,
+        "auth_header": auth_header,
+        "headers": dict(request.headers)
+    }
 
 @app.get("/api/auth/history")
 async def get_user_history(current_user: str = Depends(verify_token)):
