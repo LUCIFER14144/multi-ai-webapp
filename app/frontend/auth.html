@@ -356,7 +356,7 @@
           localStorage.setItem('user', JSON.stringify(data.user));
           showStatus('Login successful! Redirecting...', 'success');
           setTimeout(() => {
-            window.location.href = '/';
+            window.location.href = '/dashboard';
           }, 1000);
         } else {
           showStatus(data.detail || 'Login failed', 'error');
@@ -401,7 +401,7 @@
           localStorage.setItem('user', JSON.stringify(data.user));
           showStatus('Account created! Redirecting...', 'success');
           setTimeout(() => {
-            window.location.href = '/';
+            window.location.href = '/dashboard';
           }, 1000);
         } else {
           showStatus(data.detail || 'Registration failed', 'error');
@@ -436,7 +436,7 @@
     
     // Check if already logged in
     if (localStorage.getItem('token')) {
-      window.location.href = '/';
+      window.location.href = '/dashboard';
     }
   </script>
 </body>

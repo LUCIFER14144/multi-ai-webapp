@@ -18,7 +18,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Request, Depends, status
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, validator
 from fastapi.middleware.cors import CORSMiddleware
@@ -167,14 +167,11 @@ try:
 except Exception as e:
     logger.error(f"Failed to mount static files: {e}")
 
-# Serve SPA index for root only (no catch-all that might mask /api/*)
+# Authentication-first routing: redirect to auth page by default
 @app.get("/")
-async def serve_index():
-    frontend_dir = os.path.join(Path(__file__).parent, "frontend")
-    index_path = os.path.join(frontend_dir, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return {"message": "Multi-AI Webapp", "status": "running", "docs": "/docs"}
+async def root():
+    """Redirect to authentication page - users must login first"""
+    return RedirectResponse(url="/auth.html", status_code=302)
 
 # Local run helper
 if __name__ == "__main__":
@@ -869,8 +866,8 @@ async def generate(task: TaskRequest, current_user: str = Depends(verify_token))
         
         raise HTTPException(status_code=500, detail=f"Pipeline error: {error_msg[:300]}")
 
-@app.get("/")
-async def root():
+@app.get("/dashboard")
+async def dashboard_page(current_user: str = Depends(verify_token)):
     """Serve the dashboard (requires authentication)"""
     try:
         html_path = os.path.join(os.path.dirname(__file__), "frontend", "dashboard.html")
